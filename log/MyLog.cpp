@@ -14,8 +14,9 @@
   Organization:
 *********************************************************************/
 #include "log/MyLog.h"
-#include <log4cplus/log4cplus.h>
-using namespace log4cplus;
+#include <iostream>
+// #include <log4cplus/log4cplus.h>
+// using namespace log4cplus;
 namespace ShareSpace {
   namespace MyLog {
     enum  {
@@ -31,35 +32,45 @@ namespace ShareSpace {
 
    
     bool Log::log_init(const std::string& file) {
-      log4cplus::initialize();
-      PropertyConfigurator::doConfigure(LOG4CPLUS_TEXT(file.c_str()));
-      log_debug(LOG4CPLUS_VERSION_STR);
+//       log4cplus::initialize();
+//       PropertyConfigurator::doConfigure(LOG4CPLUS_TEXT(file.c_str()));
+//       log_debug(LOG4CPLUS_VERSION_STR);
       return true;
     }
     
     void Log::log_release() {
-      Logger::shutdown();
+    /*  Logger::shutdown();*/
+    }
+
+
+    void coutLog(const std::string& log){
+      std::cout << log << std::endl;
     }
 
     void Log::log_error(const std::string& s) {
-      auto log = Logger::getInstance(LogFileName[LOG_ERROR]);
-      LOG4CPLUS_ERROR_STR(log, s);
+//       auto log = Logger::getInstance(LogFileName[LOG_ERROR]);
+//       LOG4CPLUS_ERROR_STR(log, s);
+      coutLog(s);
     }
     void Log::log_debug(const std::string& s) {
-      auto log = Logger::getInstance(LogFileName[LOG_DEBUG]);
-      LOG4CPLUS_DEBUG_STR(log, s);
+//       auto log = Logger::getInstance(LogFileName[LOG_DEBUG]);
+//       LOG4CPLUS_DEBUG_STR(log, s);
+       coutLog(s);
     }
     void Log::log_warning(const std::string& s) {
-      auto log = Logger::getInstance(LogFileName[LOG_WARNING]);
-      LOG4CPLUS_WARN_STR(log, s);
+//       auto log = Logger::getInstance(LogFileName[LOG_WARNING]);
+//       LOG4CPLUS_WARN_STR(log, s);
+      coutLog(s);
     }
     void Log::log_info(const std::string& s) {
-      auto log = Logger::getInstance(LogFileName[LOG_INFO]);
-      LOG4CPLUS_INFO_STR(log, s);
+//       auto log = Logger::getInstance(LogFileName[LOG_INFO]);
+//       LOG4CPLUS_INFO_STR(log, s);
+      coutLog(s);
     }
     void Log::log_fatal(const std::string& s) {
-      auto log = Logger::getInstance(LogFileName[LOG_FATAL]);
-      LOG4CPLUS_FATAL_STR(log, s);
+//       auto log = Logger::getInstance(LogFileName[LOG_FATAL]);
+//       LOG4CPLUS_FATAL_STR(log, s);
+      coutLog(s);
     }
   }
 }

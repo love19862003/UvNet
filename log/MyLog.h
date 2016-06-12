@@ -53,6 +53,9 @@ namespace ShareSpace {
         return toString(t) + makeString(args...);
       }
     };
+
+  }
+}
 #define LOGINIT( file)  ShareSpace::MyLog::Log::log_init(file)
 #define LOGRELEASE()      ShareSpace::MyLog::Log::log_release()
 
@@ -97,6 +100,5 @@ namespace ShareSpace {
 #define LOGFATAL(s,...)  do { std::string _str = FILESTR + ShareSpace::MyLog::Log::makeString(s, ##__VA_ARGS__);\
                                    ShareSpace::MyLog::Log::log_fatal(std::move(_str)); } while(0)
 
-  }
-}
+
 #endif

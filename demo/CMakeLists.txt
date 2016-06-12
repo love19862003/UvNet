@@ -1,12 +1,13 @@
-ADD_EXECUTABLE(demo1 demo1.cpp)
+ADD_EXECUTABLE(demo1 demo1.cpp demo.h main.cpp)
+SOURCE_GROUP("Include" FILES demo.h) 
 ADD_DEPENDENCIES(demo1 ${LINK_LIBS})
 TARGET_LINK_LIBRARIES(demo1 ${LINK_LIBS})
 
-ADD_EXECUTABLE(demo2 demo2.cpp)
+ADD_EXECUTABLE(demo2  demo2.cpp demo.h  main.cpp)
 ADD_DEPENDENCIES(demo2 ${LINK_LIBS})
 TARGET_LINK_LIBRARIES(demo2 ${LINK_LIBS})
 
 
-ADD_EXECUTABLE(demo3 demo3.cpp)
+ADD_EXECUTABLE(demo3 demo3.cpp demo.h main.cpp)
 ADD_DEPENDENCIES(demo3 ${LINK_LIBS})
 TARGET_LINK_LIBRARIES(demo3 ${LINK_LIBS})
