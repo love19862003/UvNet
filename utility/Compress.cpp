@@ -10,7 +10,7 @@
 *********************************************************************/
 #include <string.h>
 #include "utility/Compress.h"
-#include "contrib/zlib/zlib.h"
+#include "zlib.h"
 #include "utility/ThreadStatic.h"
    
 namespace ShareSpace{
