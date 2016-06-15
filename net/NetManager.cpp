@@ -147,10 +147,11 @@ namespace ShareSpace {
       bool debug() const{ 
         auto fun = [](const SessionMap::pair_type& pair){
           auto s = pair.second;
-          if (s){
-            LOGDEBUG(s->remoteAddress());
-          }
+          if (s){ LOGDEBUG(s->info());}
         };
+        for(auto& t : m_threads){
+          LOGDEBUG(t->info());
+        }
         m_sessions.forEach(fun);
         return true;
       }
@@ -171,15 +172,15 @@ namespace ShareSpace {
       //启动网络服务模块
       bool start(){
         LOGDEBUG("uv:", uv_version_string());
-        m_state = NetService::_SERVICE_RUN_;
         for(unsigned int i = 0; i < m_workThreadCount; ++i){
           m_threads.push_back(std::make_shared<NetThread>());
         }
         m_nets.forEach([this](const NetObjectMap::pair_type& pair){
           auto p = pair.second;
-          auto t = thread();
+          auto t = findThread();
           p->bindThread(t);
         });
+        m_state = NetService::_SERVICE_RUN_;
         for(auto& t : m_threads){
           t->start();
         }
@@ -210,7 +211,7 @@ namespace ShareSpace {
                                                      std::placeholders::_2);
         auto ptr = ObjectBase::create(property, fun);
         m_nets.addData(property.config().m_name, ptr);
-        if(isRun()){ ptr->bindThread(thread()); }
+        if(isRun()){ ptr->bindThread(findThread()); }
         return true;
       }
       //发送消息
@@ -243,22 +244,26 @@ namespace ShareSpace {
         if(s){ return s->setKicked(); }
         return false;
       }
-      ThreadPtr thread(){
-        ThreadPtr t;
-        size_t value = 0;
-        for(auto& tt : m_threads){
-          if(!t || value < tt->busy()){ t = tt; value = tt->busy(); }
+      ThreadPtr findThread(){
+        if(isRun()){
+          return *std::min_element(m_threads.begin(),
+                                   m_threads.end(),
+                                   [](const ThreadPtr& l, const ThreadPtr& r){return l->getSpeed() < r->getSpeed(); });
+        } else{
+           return *std::min_element(m_threads.begin(),
+                                    m_threads.end(),
+                                    [](const ThreadPtr& l, const ThreadPtr& r){return l->value() < r->value();});
         }
-        return t;
+        
       }
 
     protected:
-      std::list<ThreadPtr> m_threads;             //工作线程池
-      SessionMap m_sessions;
-      NetObjectMap m_nets;
-      ServiceState m_state;                                     //服务状态
-      std::atomic<SessionId> m_currentId;  //下一个session id 
-      unsigned int m_workThreadCount;                           //工作收发线程数量
+      std::list<ThreadPtr> m_threads;           //工作线程池
+      SessionMap m_sessions;                    //在线链接
+      NetObjectMap m_nets;                      //网络对象
+      ServiceState m_state;                     //服务状态
+      std::atomic<SessionId> m_currentId;       //下一个session id 
+      unsigned int m_workThreadCount;           //工作收发线程数量
     };
 
     NetManager::NetManager(unsigned int t)

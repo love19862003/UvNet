@@ -191,7 +191,7 @@ namespace ShareSpace {
         return;
       }
       m_head._len = m_data->length();
-      m_head._mask = 0;
+      //m_head._mask = m_head._mask;
       m_head._check = Utility::crc32Buf(m_data->data() + sizeof(head), m_head._len - sizeof(head));
       if(com) { compress(); }
       m_data->setHeadPod(m_head);

@@ -28,12 +28,11 @@ namespace ShareSpace {
      private:
        NetThread(const NetThread&) = delete;
        NetThread& operator=(const NetThread&) = delete;
-     public:
-       friend void callAsyncAddObject(uv_async_t* handle);
-       friend void callAsyncStopThread(uv_async_t* handle);
-       friend void callAsyncKickSession(uv_async_t* handle);
-       friend void callAsyncSendMessage(uv_async_t* handle);
 
+       enum {
+         TIME_INTERVATE = 10000,
+       };
+     public:
        enum ThreadState {
          _INIT_ = 0,
          _RUN_ = 1,
@@ -58,9 +57,6 @@ namespace ShareSpace {
        explicit  NetThread();
        ~NetThread();
        uv_loop_t* loop() { return m_loop; }
-
-       // busy value
-       size_t busy() const;
        // set stop work thread  main thread
        void stop();
        // start thread  main thread
@@ -83,6 +79,12 @@ namespace ShareSpace {
        bool check();
        //main thread
        bool addObject( ObjectPtr obj);
+       //thread info
+       std::string info() const;
+       // speed for send and recv
+       inline size_t getSpeed() const{return m_lastTimeRecv + m_lastTimeSend;}
+       //
+       inline size_t value() const{ return m_value;}
      protected:
        //work thread
        void asyncAddObject();
@@ -92,6 +94,7 @@ namespace ShareSpace {
        void asyncKickSession();
      private:
        uv_loop_t*  m_loop;                  //线程所在的loop
+       uv_timer_t  m_time;                  //io数据定时统计
        std::thread m_thread_work;           //线程
        uv_async_t  m_asyncs[async_max_];    //异步信号
        std::mutex  m_mutexs[mutex_max_];    //锁
@@ -100,13 +103,18 @@ namespace ShareSpace {
        std::set<SessionPtr>   m_onlieList;  //当前在线的链接
        std::list<MessagePtr>  m_recvList;   //本线程收到的消息列表
        std::list<MessagePtr>  m_sendList;   //本线程需要下发的消息列表
-       unsigned int m_onlines; //在线的session数量
+       size_t m_onlines = 0;                //在线的session数量
        size_t m_totalRealRecv = 0;          //收到的字节数
        size_t m_totalRealRecvCount = 0;     //收到的消息数
        size_t m_totalRealSendCount = 0;     //发送的消息数
        size_t m_totalRealSendSize = 0;      //发送的字节数
        size_t m_totalSendCount = 0;         //总计请求发送的消息数
        size_t m_totalSendSize = 0;          //总计请求发送的字节数
+       size_t m_timerSend = 0;              //发送数据统计
+       size_t m_timerRecv = 0;              //收取数据统计
+       size_t m_lastTimeSend = 0;           //上次的发送数据统计
+       size_t m_lastTimeRecv = 0;           //上次的收取数据统计
+       size_t m_value = 0;                  //
        
      };
   }

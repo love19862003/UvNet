@@ -13,33 +13,13 @@
 #include "net/NetObj.h"
 namespace ShareSpace {
   namespace NetSpace {
-    
-    void callAsyncAddObject(uv_async_t* handle){
-      NetThread* p = static_cast<NetThread*>(handle->data);
-      if(p){ p->asyncAddObject(); }
-    }
-    void callAsyncStopThread(uv_async_t* handle) {
-      NetThread* p = static_cast<NetThread*>(handle->data);
-      if(p) { p->asyncStopThread(); }
-    }
-    void callAsyncKickSession(uv_async_t* handle) {
-      NetThread* p = static_cast<NetThread*>(handle->data);
-      if(p) { p->asyncKickSession(); }
-    }
-    void callAsyncSendMessage(uv_async_t* handle) {
-      NetThread* p = static_cast<NetThread*>(handle->data);
-      if(p) { p->realSend(); }
-    }
-
-    static void closeThreadSync(uv_handle_t* /*handle*/) {
-      LOGDEBUG("close work thread sync");
-    }
     NetThread::NetThread() : m_state(_INIT_), m_onlines(0) {
       m_loop = podMalloc<uv_loop_t>();
       m_loop->data = this;
       for(auto& a : m_asyncs) {
         a.data = this;
       }
+      m_time.data = this;
     }
     NetThread::~NetThread() {
       podFree<uv_loop_t>(m_loop);
@@ -49,9 +29,7 @@ namespace ShareSpace {
       m_sendList.clear();
     }
 
-    size_t  NetThread::busy() const {
-      return m_onlines > 0 ? (m_totalSendSize + m_totalRealRecv) / m_onlines : 0;
-    }
+   
     void  NetThread::stop() {
       int r = uv_async_send(&m_asyncs[NetThread::async_stop_thread]);
       uvError("uv_async_send:", r);
@@ -81,9 +59,17 @@ namespace ShareSpace {
       realSend();
       {
         std::lock_guard<std::mutex>lock(m_mutexs[mutex_session]);
-        for(auto& s : m_onlieList){s->close();}
+        for(auto& s : m_onlieList){
+          s->close();
+        }
       }
-      for(auto& v : m_asyncs) { uv_close((uv_handle_t*)&v, closeThreadSync); }
+      for(auto& v : m_asyncs) { 
+        uv_close((uv_handle_t*)&v, [](uv_handle_t* /*handle*/){LOGDEBUG("close async");}  );
+      }
+      
+      uv_timer_stop(&m_time);
+      uv_close((uv_handle_t*)&m_time ,[](uv_handle_t* /*handle*/){LOGDEBUG("timer close");});
+
       int r = uv_loop_alive(m_loop);
       while(r == 0) {
         r = uv_loop_alive(m_loop);
@@ -101,17 +87,52 @@ namespace ShareSpace {
       }
     }
 
+
     void NetThread::threadRun(){
       int r = uv_loop_init(m_loop);
       uvError("uv_loop_init:", r);
-      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_add_object], callAsyncAddObject);
+      auto funAddObject = [](uv_async_t* handle){
+        NetThread* p = static_cast<NetThread*>(handle->data);
+        if(p){ p->asyncAddObject(); }
+      };
+
+      auto funStop = [](uv_async_t* handle){
+        NetThread* p = static_cast<NetThread*>(handle->data);
+        if(p){ p->asyncStopThread(); }
+      };
+
+      auto funKick = [](uv_async_t* handle){
+        NetThread* p = static_cast<NetThread*>(handle->data);
+        if(p){ p->asyncKickSession(); }
+      };
+
+      auto funSend = [](uv_async_t* handle){
+        NetThread* p = static_cast<NetThread*>(handle->data);
+        if(p){ p->realSend(); }
+      };
+
+      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_add_object], funAddObject);
       uvError("uv_async_init:", r);
-      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_stop_thread], callAsyncStopThread);
+      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_stop_thread], funStop);
       uvError("uv_async_init:", r);
-      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_kick_session], callAsyncKickSession);
+      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_kick_session], funKick);
       uvError("uv_async_init:", r);
-      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_send_message], callAsyncSendMessage);
+      r = uv_async_init(m_loop, &m_asyncs[NetThread::async_send_message], funSend);
       uvError("uv_async_init:", r);
+      r = uv_timer_init(m_loop, &m_time);
+      uvError("uv_timer_init:", r);
+
+      auto cb = [](uv_timer_t* time){
+        NetThread* t = static_cast<NetThread*>(time->data);
+        if(t){
+          t->m_lastTimeSend = t->m_timerSend; 
+          t->m_timerSend = 0;
+          t->m_lastTimeRecv = t->m_timerRecv; 
+          t->m_timerRecv = 0;
+        }
+      };
+      r = uv_timer_start(&m_time, cb, TIME_INTERVATE, TIME_INTERVATE);
+
       for(auto& obj : m_objects) { obj->start(); }
       m_state = _RUN_;
       r = uv_run(m_loop, UV_RUN_DEFAULT);
@@ -126,6 +147,7 @@ namespace ShareSpace {
       m_recvList.insert(m_recvList.end(), list.begin(), list.end());
       m_totalRealRecvCount += list.size();
       m_totalRealRecv += size;
+      m_timerRecv += size;
     }
     void NetThread::realSend(){
       auto sessionFun = [&](SessionId id)->SessionPtr {
@@ -161,6 +183,7 @@ namespace ShareSpace {
           it = m_sendList.erase(it);
           m_totalRealSendCount++;
           m_totalRealSendSize += size;
+          m_timerSend += size;
         } else {
           ++it;
         }
@@ -214,6 +237,10 @@ namespace ShareSpace {
       uvError("uv_async_send:", r);
       return true;
     }
+    enum {
+      S_VALUE = 3000,
+      C_VALUE = 2500,
+    };
     //增加一个网络对象
     bool NetThread::addObject(ObjectPtr obj){
       if (_RUN_ == m_state){
@@ -224,7 +251,24 @@ namespace ShareSpace {
       } else{
         m_objects.push_back(obj);
       }
+
+      if (obj){
+        m_value += obj->type() == _SERVER_FLAG_  ? S_VALUE : C_VALUE;   
+      }
+      
       return true;
+    }
+
+    std::string NetThread::info() const{
+     return std::move(MyLog::Log::makeString("\nNet thread:", (uint64)(&m_thread_work),
+                                             "\nonlines:", m_onlines,
+                                             "\ntotalRecv:", m_totalRealRecv,
+                                             "\ntotalRecvCount:", m_totalRealRecvCount,
+                                             "\ntotalSend:", m_totalRealSendSize, "/" , m_totalSendSize,
+                                             "\ntotalSendCount:", m_totalRealSendCount, "/" , m_totalSendCount,
+                                             "\ntime:",TIME_INTERVATE," data:", m_lastTimeRecv, "/", m_lastTimeSend,
+                                             "\nspeed:", m_lastTimeRecv*1000/TIME_INTERVATE, "/" ,m_lastTimeSend*1000/TIME_INTERVATE,
+                                             "\n\n"));
     }
     //////////////////////////////////////////////////////////////////////////
     

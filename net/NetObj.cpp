@@ -16,11 +16,11 @@
 namespace ShareSpace{
   namespace NetSpace{
 
-    static void newConnectCall(uv_stream_t* server, int status);
-    static void invaildTcpConnet(uv_handle_t* t){
-      uv_tcp_t* tcp = (uv_tcp_t*)(t);
-      podFree(tcp);
-    }
+    /*static void newConnectCall(uv_stream_t* server, int status);*/
+//     static void invaildTcpConnet(uv_handle_t* t){
+//       uv_tcp_t* tcp = (uv_tcp_t*)(t);
+//       podFree(tcp);
+//     }
     class TcpServer : public ObjectBase{
       enum {buffer_len = 256,};
     public:
@@ -67,7 +67,7 @@ namespace ShareSpace{
                            std::bind(&NetThread::notifySend, t.get(), std::placeholders::_1));
           t->addSession(s);
         } else{
-          uv_close((uv_handle_t*)tcp, invaildTcpConnet);
+          uv_close((uv_handle_t*)tcp, [](uv_handle_t* t){ podFree((uv_tcp_t*)(t));});
         }
       }
 
@@ -92,7 +92,14 @@ namespace ShareSpace{
         }
         r = uv_tcp_bind(m_tcp, &addr.addr, 0);
         uvError("uv_tcp_bind:", r);
-        r = uv_listen((uv_stream_t*)(m_tcp), m_maxConnect, newConnectCall);
+
+        r = uv_listen((uv_stream_t*)(m_tcp),
+                      m_maxConnect,
+                      [](uv_stream_t* server, int status){
+          if(status == -1){ return; }
+          TcpServer* s = static_cast<TcpServer*>(server->data);
+          if(s){ s->sessionConnect(); }
+        });
         uvError("uv_listen:", r);
         return true;
       }
@@ -118,11 +125,11 @@ namespace ShareSpace{
        /*bool m_ip6;*/
     };
 
-    void newConnectCall(uv_stream_t* server, int status){
-      if(status == -1){ return; }
-      TcpServer* s = static_cast<TcpServer*>(server->data);
-      if(s){ s->sessionConnect(); }
-    }
+//     void newConnectCall(uv_stream_t* server, int status){
+//       if(status == -1){ return; }
+//       TcpServer* s = static_cast<TcpServer*>(server->data);
+//       if(s){ s->sessionConnect(); }
+//     }
 
 
     class TcpClient : public ObjectBase{

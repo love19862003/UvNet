@@ -25,13 +25,6 @@ namespace ShareSpace {
       NetSession(const NetSession&) = delete;
       NetSession& operator = (const NetSession&) = delete;
     public:
-      friend void callWrite(uv_write_t* req, int status);
-      friend void callConnect(uv_connect_t* req, int status);
-      friend void callAlloc(uv_handle_t* handle, size_t len, uv_buf_t* buff);
-      friend void callRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) ;
-      friend void callShutDown(uv_shutdown_t* req, int /*status*/);
-      friend void callClose(uv_handle_t* handle);
-      friend void onResolved(uv_getaddrinfo_t *resolver, int status, struct addrinfo *res);
       friend class NetThread;
 
       typedef std::function<void(const std::list<MessagePtr>&, size_t)> RecvCall;
@@ -85,6 +78,8 @@ namespace ShareSpace {
                          const SendCall& sendNotify);
       // thread safe
       const std::string& remoteAddress(){ return m_ip; }
+
+      std::string info() const;
       // thread safe
       SessionId id() const{ return m_sessionId; }
     private:
