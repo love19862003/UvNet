@@ -52,7 +52,6 @@ namespace ShareSpace {
 
       explicit NetService(unsigned int c)
         : m_state(_SERVICE_INIT_)
-        , m_currentId(INVALID_SESSION_ID)
         , m_workThreadCount(c){
         m_workThreadCount = c > 0 ? c : 1;
         m_sessions.setOptional(INVALID_SESSION_ID);
@@ -84,8 +83,9 @@ namespace ShareSpace {
       }
       //创建一个新的会话,并且分配一个NetThread(读写)线程
       SessionPtr addNewSession(const Config& config, const FunMakeBlock& fun){
-        ++m_currentId;
-        return  SessionPtr(new NetSession(m_currentId, _DEFAULT_BUFFER_SIZE, config, fun));
+        static std::atomic<SessionId> m_currentId(INVALID_SESSION_ID);
+        SessionId id = m_currentId.fetch_add(1);
+        return  SessionPtr(new NetSession(id, _DEFAULT_BUFFER_SIZE, config, fun));
       }
       //poll消息到主线程
       bool poll(){
@@ -100,7 +100,8 @@ namespace ShareSpace {
           auto obj = m_nets.getData(s->netName());
           MYASSERT(obj);
           if(obj->allow(s)){
-            m_sessions.addData(s->id(), s);
+            bool r = m_sessions.addData(s->id(), s);
+            MYASSERT(r, "get same session id ", s->id());
             obj->connect(s->id());
           } else{ realKick(s);}
         }
@@ -262,7 +263,6 @@ namespace ShareSpace {
       SessionMap m_sessions;                    //在线链接
       NetObjectMap m_nets;                      //网络对象
       ServiceState m_state;                     //服务状态
-      std::atomic<SessionId> m_currentId;       //下一个session id 
       unsigned int m_workThreadCount;           //工作收发线程数量
     };
 
