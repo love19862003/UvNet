@@ -62,20 +62,21 @@ namespace ShareSpace {
                         , m_ObjName(config.m_name)
                         ,m_makeBlockFun(fun){
       m_tcp = nullptr;
-      m_connect = podMalloc<uv_connect_t>();
+      m_connect = nullptr;
+      //m_connect = podMalloc<uv_connect_t>();
       m_write = podMalloc<uv_write_t>();
       m_shutDown = podMalloc<uv_shutdown_t>();
 
-      m_connect->data = this;
+      //m_connect->data = this;
       m_write->data = this;
       m_shutDown->data = this;
       m_flag = 0;
     }
     NetSession::~NetSession() {
       if(m_tcp){podFree(m_tcp); }
-      podFree(m_connect);
-      podFree(m_write);
-      podFree(m_shutDown);
+      if(m_connect)podFree(m_connect);
+      if(m_write)podFree(m_write);
+      if(m_shutDown)podFree(m_shutDown);
 
       m_bufferSend.reset();
       m_bufferRecv.reset();
@@ -185,28 +186,34 @@ namespace ShareSpace {
       }
     }
 
-    void NetSession::close( bool call){
-      if (call){
-        uv_close((uv_handle_t*)m_tcp, 
-                 [](uv_handle_t* handle){auto s = static_cast<NetSession*>(handle->data)->shared_from_this();if(s){s->afterClose();}});
-      }else{
-        clearFlag(SESSION_CONNECT);
-        uv_close((uv_handle_t*)m_tcp, nullptr);
-      }
-      
-    }
-    void NetSession::afterClose(){
-      if (flag(SESSION_RECONN) ){
-        m_waiteMessage.reset();
-        m_bufferRecv->reset(true);
-        m_bufferSend->reset(true);
-        MYASSERT(false);
-        connectServer();
+    void NetSession::close( /*bool call*/){
+      if (uv_is_closing((uv_handle_t*)m_tcp)){
+        LOGDEBUG("s:", m_sessionId, " ", m_ObjName, " is closeing");
         return ;
       }
-      setFlag(SESSION_CAll_CLOS);
-      clearFlag(SESSION_CONNECT);
+
+      
+//       if (call){
+//         uv_close((uv_handle_t*)m_tcp, 
+//                  [](uv_handle_t* handle){auto s = static_cast<NetSession*>(handle->data)->shared_from_this();if(s){s->afterClose();}});
+//       }else{
+        clearFlag(SESSION_CONNECT);
+        uv_close((uv_handle_t*)m_tcp, nullptr);
+      /*}*/
+      
     }
+//     void NetSession::afterClose(){
+//       if (flag(SESSION_RECONN) ){
+//         m_waiteMessage.reset();
+//         m_bufferRecv->reset(true);
+//         m_bufferSend->reset(true);
+//         //MYASSERT(false);
+//         connectServer();
+//         return ;
+//       }
+//       setFlag(SESSION_CAll_CLOS);
+//       clearFlag(SESSION_CONNECT);
+//     }
 
 //     void onResolved(uv_getaddrinfo_t *resolver, int status, struct addrinfo *res){
 //       if(status == -1){
@@ -267,10 +274,11 @@ namespace ShareSpace {
           s->connetResult(status);
         }
       };
+      if(!m_connect){m_connect = podMalloc<uv_connect_t>(); m_connect->data = this;}
       int r = uv_tcp_connect(m_connect, m_tcp, m_res->ai_addr, call);
       if(r != 0) { 
-        LOGDEBUG("connect ", m_ObjName, " error:", uv_err_name(r)); 
-        connectServer(); 
+        LOGERROR("connect ", m_ObjName, " error:", uv_err_name(r)); 
+        //connectServer(); 
       }
       return true;
     }
@@ -351,7 +359,8 @@ namespace ShareSpace {
       return std::move(MyLog::Log::makeString("session:", m_sessionId,
                                               "\naddress:", m_ip, 
                                               "\nrecv len:", m_recvTotalLen, " count:", m_recvTotalCount,
-                                              "\nsend len:", m_sendTotalLen, " count:", m_sendTotalCount));
+                                              "\nsend len:", m_sendTotalLen, " count:", m_sendTotalCount,
+                                              "\nname:", m_ObjName, " flag:", m_flag) );
 
     }
 

@@ -55,6 +55,9 @@ namespace ShareSpace {
        }
     }
     void NetThread::asyncStopThread(){
+
+      LOGDEBUG(" begin exit thread:", (uint64)this);
+
       for(auto& obj : m_objects){ obj->stop(); }
       realSend();
       {
@@ -63,20 +66,23 @@ namespace ShareSpace {
           s->close();
         }
       }
+      auto cb =  [](uv_handle_t* /*handle*/){/*LOGDEBUG("close ");*/};
       for(auto& v : m_asyncs) { 
-        uv_close((uv_handle_t*)&v, [](uv_handle_t* /*handle*/){LOGDEBUG("close async");}  );
+        uv_close((uv_handle_t*)&v, cb  );
       }
       
       uv_timer_stop(&m_time);
-      uv_close((uv_handle_t*)&m_time ,[](uv_handle_t* /*handle*/){LOGDEBUG("timer close");});
+      uv_close((uv_handle_t*)&m_time ,cb);
 
       int r = uv_loop_alive(m_loop);
       while(r == 0) {
         r = uv_loop_alive(m_loop);
         uv_stop(m_loop);
-        LOGDEBUG("set work listen thread stop");
+        LOGDEBUG("set work  thread stop");
         break;
       }
+
+      LOGDEBUG(" end exit thread:", (uint64)this);
     }
     void NetThread::asyncKickSession(){
       for (auto& s : m_onlieList){

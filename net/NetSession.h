@@ -84,7 +84,7 @@ namespace ShareSpace {
       SessionId id() const{ return m_sessionId; }
     private:
       // work thread
-      void close(bool call = true);
+      void close();
       // work thread
       bool takeToWriteBuffer(MessagePtr m);
       // work thread
@@ -92,7 +92,7 @@ namespace ShareSpace {
       // work thread
       void connetResult(int status);
       // work thread
-      void afterClose();
+      /*void afterClose();*/
       // work thread
       void allocReadBuffer(size_t len, uv_buf_t* buff);
       // work thread
