@@ -76,6 +76,19 @@ namespace ShareSpace {
                          const WriteCall& writeNotify,
                          const KickCall& kickNotify,
                          const SendCall& sendNotify);
+
+
+      //word thread
+      bool httpServerSession(uv_tcp_t* tcp,
+                             const std::string& addr,
+                             const RecvCall& recvNotify,
+                             const SendCall& sendNotify);
+      // work thread
+      void httpClientSession(uv_tcp_t * tcp,
+                             const std::string& addr,
+                             int port,
+                             const RecvCall& recvNotify,
+                             MessagePtr ptr);
       // thread safe
       const std::string& remoteAddress(){ return m_ip; }
 
@@ -106,11 +119,16 @@ namespace ShareSpace {
       bool connectServer();
       // work thread
       void read();
+
+      //
+      void startTimer();
+      void stopTimer();
     private:
       uv_tcp_t*      m_tcp;       //tcp
       uv_connect_t*  m_connect;   //conn
       uv_write_t*    m_write;     //write
       uv_shutdown_t* m_shutDown;  //shut down
+      uv_timer_t*    m_timer;     //timer
 
       SessionId m_sessionId;        //id
       BufferPointer m_bufferSend;   //cache for send

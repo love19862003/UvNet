@@ -1,12 +1,12 @@
 /********************************************************************
-	Filename: 	NetSession.cpp
-	Description:
-	Version:  1.0
-	Created:  31:3:2016   11:11
+  Filename:   NetSession.cpp
+  Description:
+  Version:  1.0
+  Created:  31:3:2016   11:11
 
-	Compiler: gcc vc
-	Author:   wufan, love19862003@163.com
-	Organization: lezhuogame
+  Compiler: gcc vc
+  Author:   wufan, love19862003@163.com
+  Organization: lezhuogame
 *********************************************************************/
 #include "net/NetSession.h"
 #include "net/NetThread.h"
@@ -66,6 +66,7 @@ namespace ShareSpace {
       //m_connect = podMalloc<uv_connect_t>();
       m_write = podMalloc<uv_write_t>();
       m_shutDown = podMalloc<uv_shutdown_t>();
+      m_timer = nullptr;
 
       //m_connect->data = this;
       m_write->data = this;
@@ -73,10 +74,11 @@ namespace ShareSpace {
       m_flag = 0;
     }
     NetSession::~NetSession() {
-      if(m_tcp){podFree(m_tcp); }
-      if(m_connect)podFree(m_connect);
-      if(m_write)podFree(m_write);
-      if(m_shutDown)podFree(m_shutDown);
+      if(m_tcp){ podFree(m_tcp); }
+      if(m_connect){ podFree(m_connect); }
+      if(m_write){ podFree(m_write); }
+      if(m_shutDown){ podFree(m_shutDown); }
+      if(m_timer){ podFree(m_timer); }
 
       m_bufferSend.reset();
       m_bufferRecv.reset();
@@ -114,7 +116,7 @@ namespace ShareSpace {
         m_waiteMessage->recv(m_bufferRecv);
         if(m_waiteMessage->done()) {
           auto p = m_waiteMessage;
-          MYASSERT(!p->error(), "crc32 check is error");
+          //MYASSERT(!p->error(), "crc32 check is error");
           m_waiteMessage = nullptr;
           return p;
         }
@@ -144,9 +146,9 @@ namespace ShareSpace {
         }
       }
       int r = uv_shutdown(m_shutDown,
-                          stream, 
+                          stream,
                           [](uv_shutdown_t* req, int){
-        auto s = static_cast<NetSession*>(req->data)->shared_from_this(); 
+        auto s = static_cast<NetSession*>(req->data)->shared_from_this();
         if(s){s->close();}});
       uvError("uv_shutdown:", r);
       return false;
@@ -173,14 +175,19 @@ namespace ShareSpace {
     }
     void NetSession::connetResult(int status){
       if (0 == status){
+        stopTimer();
         setFlag(SESSION_CONNECT);
         setFlag(SESSION_CALL_CONN);
         read();
+        if(m_bufferSend->length() > 0 ){write();}
       }else{
-        LOGINFO("connect ", m_ObjName, " failed");
+        LOGDEBUG("[net] connect ", m_ObjName, " failed status:", uv_strerror(status));
         if(flag(SESSION_RECONN)) {
-          connectServer();
+          startTimer();
+          //connectServer();
+          LOGDEBUG("[net] reconnect server ", m_ip, " port:", m_port);
         } else {
+          //MYASSERT(false);
           close();
         }
       }
@@ -188,44 +195,17 @@ namespace ShareSpace {
 
     void NetSession::close( /*bool call*/){
       if (uv_is_closing((uv_handle_t*)m_tcp)){
-        LOGDEBUG("s:", m_sessionId, " ", m_ObjName, " is closeing");
+        LOGDEBUG("[net] s:", m_sessionId, " ", m_ObjName, " is closeing");
         return ;
       }
 
-      
-//       if (call){
-//         uv_close((uv_handle_t*)m_tcp, 
-//                  [](uv_handle_t* handle){auto s = static_cast<NetSession*>(handle->data)->shared_from_this();if(s){s->afterClose();}});
-//       }else{
-        clearFlag(SESSION_CONNECT);
-        uv_close((uv_handle_t*)m_tcp, nullptr);
-      /*}*/
-      
+      uv_close((uv_handle_t*)m_tcp, [](uv_handle_t* handle){
+        auto s = static_cast<NetSession*>(handle->data)->shared_from_this();
+        if(s){ s->setFlag(SESSION_CAll_CLOS);}
+      });
+      clearFlag(SESSION_CONNECT);
     }
-//     void NetSession::afterClose(){
-//       if (flag(SESSION_RECONN) ){
-//         m_waiteMessage.reset();
-//         m_bufferRecv->reset(true);
-//         m_bufferSend->reset(true);
-//         //MYASSERT(false);
-//         connectServer();
-//         return ;
-//       }
-//       setFlag(SESSION_CAll_CLOS);
-//       clearFlag(SESSION_CONNECT);
-//     }
 
-//     void onResolved(uv_getaddrinfo_t *resolver, int status, struct addrinfo *res){
-//       if(status == -1){
-//         uvError("client reslover net error", status);
-//         return;
-//       }
-//       SessionPtr s = static_cast<NetSession*>(resolver->data)->shared_from_this();
-//       MYASSERT(s);
-//       s->m_res = res;
-//       s->connectServer();
-//       podFree(resolver);
-//    
     void NetSession::clientSession(uv_tcp_t * tcp,
                                    const std::string& addr,
                                    int port,
@@ -265,20 +245,87 @@ namespace ShareSpace {
 
       //connectServer();
     }
+
+
+    void NetSession::httpClientSession(uv_tcp_t * tcp,
+                                       const std::string& addr,
+                                       int port,
+                                       const RecvCall& recvNotify,
+                                       MessagePtr ptr){
+      m_tcp = tcp;
+      m_tcp->data = this;
+      m_ip = addr;
+      m_port = port;
+      m_threadAfterRead = recvNotify;
+      m_threadAfterWrite = nullptr;
+      m_nofitySend = nullptr;
+      m_notifyKick = nullptr;
+      if(ptr){takeToWriteBuffer(ptr);}
+
+      uv_getaddrinfo_t* req = podMalloc<uv_getaddrinfo_t>();
+      req->data = this;
+      auto onResolved = [](uv_getaddrinfo_t *resolver, int status, struct addrinfo *res){
+        if(status == -1){
+          uvError("client reslover net error", status);
+          return;
+        }
+        SessionPtr s = static_cast<NetSession*>(resolver->data)->shared_from_this();
+        if(s){
+          s->m_res = res;
+          s->connectServer();
+          podFree(resolver);
+        }
+      };
+      int r = uv_getaddrinfo(tcp->loop, req, onResolved, m_ip.c_str(), std::to_string(m_port).c_str(), nullptr);
+      if(r != 0){
+        MYASSERT(false);
+        podFree(req);
+      }
+    }
+
+
+    void NetSession::startTimer(){
+      if(!m_timer){
+        m_timer = podMalloc<uv_timer_t>();
+        m_timer->data = this;
+
+        auto tcall = [](uv_timer_t* handle){
+          SessionPtr s = static_cast<NetSession*>(handle->data)->shared_from_this();
+          if(s){ s->connectServer(); }
+        };
+        uv_timer_init(m_tcp->loop, m_timer);
+        uv_timer_start(m_timer, tcall, 1000, 10000);
+      }
+    }
+
+    void NetSession::stopTimer(){
+      if(m_timer){
+        uv_timer_stop(m_timer);
+        uv_close((uv_handle_t*)m_timer ,nullptr);
+        podFree(m_timer);
+        m_timer = nullptr;
+      }
+    }
     bool NetSession::connectServer() {
       MYASSERT(m_res);
       if(!m_res){return false;}
       auto call = [](uv_connect_t* req, int status){
         SessionPtr s = static_cast<NetSession*>(req->data)->shared_from_this();
-        if(s){
-          s->connetResult(status);
-        }
+        if(s){ s->connetResult(status);}
       };
-      if(!m_connect){m_connect = podMalloc<uv_connect_t>(); m_connect->data = this;}
+      if(m_connect){
+        podFree<uv_connect_t>(m_connect); 
+        m_connect = nullptr;
+      }
+      m_connect = podMalloc<uv_connect_t>();
+      m_connect->data = this;
       int r = uv_tcp_connect(m_connect, m_tcp, m_res->ai_addr, call);
-      if(r != 0) { 
-        LOGERROR("connect ", m_ObjName, " error:", uv_err_name(r)); 
-        //connectServer(); 
+      if(r != 0) {
+        LOGERROR("[net] connect ", m_ObjName, " error:", uv_err_name(r));
+        //connetResult(r);
+        startTimer();
+      } else{
+        stopTimer();
       }
       return true;
     }
@@ -301,17 +348,35 @@ namespace ShareSpace {
       return true;
     }
 
+    bool NetSession::httpServerSession(uv_tcp_t* tcp,
+                                       const std::string& addr,
+                                       const RecvCall& recvNotify,
+                                       const SendCall& sendNotify){
+      m_tcp = tcp;
+      m_tcp->data = this;
+      m_ip = addr;
+      m_threadAfterRead = recvNotify;
+      m_threadAfterWrite = std::bind(&NetSession::close, this);
+      m_nofitySend = sendNotify;
+      m_notifyKick = nullptr;
+      setFlag(SESSION_CONNECT);
+      setFlag(SESSION_CALL_CONN);
+      read();
+      return true;
+    }
+
     void NetSession::pushWrite(MessagePtr msg){
       msg->lock(flag(SESSSION_COMPRESS));
       ++m_sendTotalCount;
       if(m_nofitySend){ m_nofitySend(msg); }
     }
     bool NetSession::takeToWriteBuffer(MessagePtr m){
-      if (flag(SESSION_SEND) || m_bufferSend->isFull()){return false;}
+      if (flag(SESSION_SEND) || m_bufferSend->isFull() || !m){return false;}
       m->readBuffer(*m_bufferSend);
       return true;
     }
     void NetSession::write(){
+      if (flag(SESSION_SEND)){MYASSERT(false);return;}
       auto call = [](uv_write_t* req, int status){
         SessionPtr s = static_cast<NetSession*>(req->data)->shared_from_this();
         if(s){
@@ -328,8 +393,8 @@ namespace ShareSpace {
 
     void NetSession::afterWrite(int status) {
       if(status > 0) {
-        int r = uv_shutdown(m_shutDown, 
-                            (uv_stream_t*)m_tcp, 
+        int r = uv_shutdown(m_shutDown,
+                            (uv_stream_t*)m_tcp,
                             [](uv_shutdown_t* req, int){
           auto s = static_cast<NetSession*>(req->data)->shared_from_this();
           if(s){s->close();};
@@ -342,7 +407,7 @@ namespace ShareSpace {
       clearFlag(SESSION_SEND);
       if (m_threadAfterWrite){
         m_threadAfterWrite();
-      }else{MYASSERT(false); }
+      }else{/*MYASSERT(false); */}
     }
     bool NetSession::setKicked(){
       setFlag(SESSION_KICK);
@@ -351,21 +416,17 @@ namespace ShareSpace {
         m_notifyKick();
         return true;
       }
-      MYASSERT(false);
+     /* MYASSERT(false);*/
       return false;
     }
 
     std::string NetSession::info() const{
       return std::move(MyLog::Log::makeString("session:", m_sessionId,
-                                              "\naddress:", m_ip, 
+                                              "\naddress:", m_ip,
                                               "\nrecv len:", m_recvTotalLen, " count:", m_recvTotalCount,
                                               "\nsend len:", m_sendTotalLen, " count:", m_sendTotalCount,
                                               "\nname:", m_ObjName, " flag:", m_flag) );
-
     }
-
-
-
     //////////////////////////////////////////////////////////////////////////
   }
 }

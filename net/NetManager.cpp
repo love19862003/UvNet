@@ -19,6 +19,8 @@
 #include "net/NetCore.h"
 #include "net/NetUV.h"
 #include "net/NetObj.h"
+#include "net/NetHttp.h"
+#include "net/http_parser.h"
 #include "utility/MapTemplate.h"
 #include "utility/Compress.h"
 #include "utility/StringUtility.h"
@@ -57,24 +59,25 @@ namespace ShareSpace {
         m_sessions.setOptional(INVALID_SESSION_ID);
         m_nets.setOptional("");
 
-        LOGINFO("server ip address info:", sizeof(sockaddr)," v6 " ,sizeof(sockaddr_in6)," v4 " ,sizeof(sockaddr_in));
-        char buf[512];
+        LOGINFO("[net] server ip address info:", sizeof(sockaddr)," v6 " ,sizeof(sockaddr_in6)," v4 " ,sizeof(sockaddr_in));
+       /* char buf[512];
         uv_interface_address_t *info;
         int count = 0;
         uv_interface_addresses(&info, &count);
         for (int i = 0 ; i < count; ++i){
-          uv_interface_address_t interface = info[i];
-          LOGINFO("Internal:", interface.is_internal ? "Yes" : "No");
+          const struct uv_interface_address_t& interface = info[i];
+          LOGINFO("[net] Internal:", interface.is_internal ? "Yes" : "No");
           if(interface.address.address4.sin_family == AF_INET){
             uv_ip4_name(&interface.address.address4, buf, sizeof(buf));
-            LOGINFO("IPv4 address:", buf);
+            LOGINFO("[net] IPv4 address:", buf);
           } else if(interface.address.address4.sin_family == AF_INET6){
             uv_ip6_name(&interface.address.address6, buf, sizeof(buf));
-            LOGINFO("IPv6 address:", buf);
+            LOGINFO("[net] IPv6 address:", buf);
           }
         }
         uv_free_interface_addresses(info, count);
-        LOGINFO("...");
+        LOGINFO("[net] ...");
+        */
       }
       virtual ~NetService(){
         m_threads.clear();
@@ -83,8 +86,9 @@ namespace ShareSpace {
       }
       //创建一个新的会话,并且分配一个NetThread(读写)线程
       SessionPtr addNewSession(const Config& config, const FunMakeBlock& fun){
-        static std::atomic<SessionId> m_currentId(INVALID_SESSION_ID);
+        static std::atomic<SessionId> m_currentId(INVALID_SESSION_ID + 1);
         SessionId id = m_currentId.fetch_add(1);
+        LOGDEBUG("[net] new session id:", id);
         return  SessionPtr(new NetSession(id, _DEFAULT_BUFFER_SIZE, config, fun));
       }
       //poll消息到主线程
@@ -136,11 +140,17 @@ namespace ShareSpace {
         clockBegin = clockEnd = std::chrono::steady_clock::now();
         std::chrono::steady_clock::duration delay;
 
+        bool state  = false;
+
         do{
           poll();
           clockEnd = std::chrono::steady_clock::now();
           delay = std::chrono::duration_cast<std::chrono::milliseconds>(clockEnd - clockBegin);
-        } while(delay.count() <= ms || check());
+          state = check();
+#ifdef _DEBUG
+          LOGDEBUG("[net] check stop state:", state ? " run " : "stop" );
+#endif
+        } while(delay.count() <= ms || state);
       }
 
       bool isRun() const{ return m_state == _SERVICE_RUN_; }
@@ -148,13 +158,21 @@ namespace ShareSpace {
       bool debug() const{ 
         auto fun = [](const SessionMap::pair_type& pair){
           auto s = pair.second;
-          if (s){ LOGDEBUG(s->info());}
+          if (s){ LOGDEBUG("[net] ", s->info());}
         };
         for(auto& t : m_threads){
-          LOGDEBUG(t->info());
+          LOGDEBUG("[net] ",t->info());
         }
         m_sessions.forEach(fun);
         return true;
+      }
+
+      std::string remoteAddress(SessionId id) const{
+        auto s = m_sessions.getData(id);
+        if (s){
+          return std::move(std::string(s->remoteAddress()));
+        }
+        return  std::move(std::string());
       }
 
       bool setAllow(const NetName& name, const std::string& allow){
@@ -166,13 +184,15 @@ namespace ShareSpace {
       }
       bool check() const{
         for(auto&t : m_threads){
-          if(t->check()){ return true; }
+          if(t->check()){
+            return true;
+          }
         }
         return false;
       }
       //启动网络服务模块
       bool start(){
-        LOGDEBUG("uv:", uv_version_string());
+        LOGDEBUG("[net] uv:", uv_version_string());
         for(unsigned int i = 0; i < m_workThreadCount; ++i){
           m_threads.push_back(std::make_shared<NetThread>());
         }
@@ -200,8 +220,68 @@ namespace ShareSpace {
         auto s = m_sessions.getData(id);
         return realKick(s);
       }
+
+      uint32 httpRequest(const char* url, uint32 port, uint32 method, const std::string& path, const std::string& query, const NetManager::RequestCall& Call){
+        ++m_httpRequest;
+        uint32 id = m_httpRequest;
+        NetSpace::Config  config;
+        config.m_name = "_Http_Client**" + std::to_string(id);
+        config.m_address = url;
+        config.m_port = port;
+        config.m_maxConnect = 1;
+        config.m_serviceType = NetSpace::_HTTP_CLIENT_;
+        config.m_autoReconnect = false;
+        config.m_compress = false;
+        config.m_clearOnClose = true;
+        
+        auto back = [Call, id, this](const NetName& name, const MessagePtr& ptr){
+         /* NetSpace::SessionId s = ptr->session();*/
+          auto p = std::static_pointer_cast<NetSpace::HttpBlock>(ptr);
+          if(!ptr->error() && p){ Call(id, p->content());}
+          removeClient(name);
+        };
+
+        NetSpace::NetProperty property(config,back, nullptr,nullptr, [](const NetSpace::SessionId& id){return std::make_shared<NetSpace::HttpBlock>(id, false); });
+        MessagePtr m(new HttpBlock(0, method, config.m_address, path, query));
+        if(add(property, m)){ return id;}
+        return 0;
+      }
+
+      bool httpServer(uint32 port, const  NetManager::ResponseCall& Call){
+        NetSpace::Config  config;
+        config.m_name = "_Http_Server**" + std::to_string(port);
+        config.m_address = "0.0.0.0";
+        config.m_port = port;
+        config.m_maxConnect = 3000;
+        config.m_serviceType = NetSpace::_HTTP_SERVER_;
+        config.m_autoReconnect = false;
+        config.m_compress = false;
+        config.m_clearOnClose = true;
+
+        auto back = [this, Call](const NetName& /*name*/, const MessagePtr& ptr){
+          NetSpace::SessionId s = ptr->session();
+          auto p = std::static_pointer_cast<NetSpace::HttpBlock>(ptr);
+          uint32 code = HTTP_STATUS_OK ;
+          std::string result;
+          if(ptr->error() || !p){
+            code = HTTP_STATUS_NOT_FOUND;
+          } else{
+            result = Call(p->url(), p->content());
+          }
+          MessagePtr response(new HttpBlock(s,code, result));
+          send(response);
+        };
+
+        NetSpace::NetProperty property(config,
+                                       back,
+                                       nullptr,
+                                       nullptr,
+                                       [](const NetSpace::SessionId& id){return std::make_shared<NetSpace::HttpBlock>(id, true); });
+        return add(property);
+      }
+
       //增加一个网络对象
-      bool add(const NetProperty& property){
+      bool add(const NetProperty& property, MessagePtr m = nullptr){
         if(property.config().m_name.empty()){ return false; }
         if(m_nets.hasData(property.config().m_name)){ return false; }
         if(_SERVICE_STOP_ == m_state){ return false; }
@@ -211,6 +291,7 @@ namespace ShareSpace {
                                                      std::placeholders::_1,
                                                      std::placeholders::_2);
         auto ptr = ObjectBase::create(property, fun);
+        if(m){ptr->request(m);}
         m_nets.addData(property.config().m_name, ptr);
         if(isRun()){ ptr->bindThread(findThread()); }
         return true;
@@ -246,16 +327,9 @@ namespace ShareSpace {
         return false;
       }
       ThreadPtr findThread(){
-        if(isRun()){
-          return *std::min_element(m_threads.begin(),
-                                   m_threads.end(),
-                                   [](const ThreadPtr& l, const ThreadPtr& r){return l->getSpeed() < r->getSpeed(); });
-        } else{
-           return *std::min_element(m_threads.begin(),
-                                    m_threads.end(),
-                                    [](const ThreadPtr& l, const ThreadPtr& r){return l->value() < r->value();});
-        }
-        
+        bool run = isRun();
+        auto fun =  [run](const ThreadPtr& l, const ThreadPtr& r){return run ? (l->getSpeed() < r->getSpeed()) : (l->value() < r->value()); } ;
+        return *std::min_element(m_threads.begin(),m_threads.end(), fun);
       }
 
     protected:
@@ -263,6 +337,7 @@ namespace ShareSpace {
       SessionMap m_sessions;                    //在线链接
       NetObjectMap m_nets;                      //网络对象
       ServiceState m_state;                     //服务状态
+      uint32 m_httpRequest = 0;
       unsigned int m_workThreadCount;           //工作收发线程数量
     };
 
@@ -314,5 +389,18 @@ namespace ShareSpace {
     bool NetManager::debug() const{
       return m_service->debug();
     }
+    std::string NetManager::remoteAddress(SessionId id) const{
+      return m_service->remoteAddress(id);
+    }
+
+    uint32 NetManager::httpRequest(const char* url, uint32 port, uint32 method, const std::string& path, const std::string& query, const RequestCall& Call){
+      return m_service->httpRequest(url, port, method, path, query, Call);
+    }
+
+    //http server
+    bool NetManager::httpServer(uint32 port, const ResponseCall& Call){
+     return m_service->httpServer(port, Call);
+    }
+
   }
 }

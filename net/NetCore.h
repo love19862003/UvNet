@@ -37,6 +37,8 @@ namespace ShareSpace {
     enum ServiceFlag{
       _SERVER_FLAG_,
       _CLIENT_FLAG_,
+      _HTTP_SERVER_,
+      _HTTP_CLIENT_,
     };
     
 

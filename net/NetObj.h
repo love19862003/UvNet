@@ -30,6 +30,8 @@ namespace ShareSpace{
       virtual bool stop() = 0;
       virtual bool kick(){return false;}
       virtual bool allow(SessionPtr s)  = 0;
+      virtual uint32 value() = 0; 
+      virtual void request(MessagePtr ){}
       enum{
         _TAG_ADD = 0x0001,
         _TAG_ALLOW = 0x0002,
@@ -37,12 +39,23 @@ namespace ShareSpace{
       virtual bool setAllow(const std::string& allow) = 0;
 
       ServiceFlag  type() const {return m_property.config().m_serviceType; }
+      
 
-      void connect(SessionId id){ m_property.connectFun()(m_property.config().m_name, id);}
-      void close(SessionId id){ m_property.closeFun()(m_property.config().m_name, id);}
-      void call(MessagePtr m){ m_property.callFun()(m_property.config().m_name,m);}
+      void connect(SessionId id){ 
+        auto fun = m_property.connectFun(); 
+        if(fun){ fun(m_property.config().m_name, id); }
+      }
+      void close(SessionId id){ 
+        auto fun = m_property.closeFun(); 
+        if(fun) {fun(m_property.config().m_name, id);}
+      }
+      void call(MessagePtr m){ 
+        auto fun = m_property.callFun();
+        if(fun){fun(m_property.config().m_name,m);}
+      }
       const Config& config() const{return m_property.config();}
     protected:
+      void setNoPIPEOptional(uv_tcp_t* t);
       unsigned int m_flag;           //标识符
     private:
       NetProperty m_property;        //配置信息

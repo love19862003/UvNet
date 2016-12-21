@@ -93,6 +93,7 @@ namespace ShareSpace {
       template <typename PODTYPE>
       bool readPod(PODTYPE& t) {
         assert(std::is_pod<PODTYPE>::value);
+        if(!canRead(sizeof(PODTYPE))) { return false; }
         char* p = readData(sizeof(PODTYPE));
         if(!p) { return false; }
         t = *((PODTYPE*)(p));

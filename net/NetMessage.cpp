@@ -209,7 +209,7 @@ namespace ShareSpace {
           return;
         }
         if(len < str.length()) { return; }
-        LOGDEBUG("compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
+        LOGDEBUG("[net] compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
         m_data->reset();
         m_head._mask |= (1 << NetBlock::head::_MASK_COMPRESS_);
         m_head._len =sizeof(m_head) + str.length();
@@ -261,7 +261,7 @@ namespace ShareSpace {
           m_data->lock();
           auto crc = Utility::crc32Buf(m_data->data(), m_data->length());
           setError(m_head._check != crc);
-          if (error()){LOGDEBUG("m_head._check:", m_head._check, " data crc:", crc);}
+          if (error()){LOGDEBUG("[net] m_head._check:", m_head._check, " data crc:", crc);}
           return true;
         }
       }

@@ -1,12 +1,12 @@
 /********************************************************************
-	Filename: 	NetRedis.cpp
-	Description:
-	Version:  1.0
-	Created:  31:3:2016   19:59
-	
-	Compiler: gcc vc
-	Author:   wufan, love19862003@163.com
-	Organization: lezhuogame
+  Filename:   NetRedis.cpp
+  Description:
+  Version:  1.0
+  Created:  31:3:2016   19:59
+
+  Compiler: gcc vc
+  Author:   wufan, love19862003@163.com
+  Organization: lezhuogame
 *********************************************************************/
 #include "net/NetRedis.h"
 #include "net/redisparser.h"
@@ -14,7 +14,7 @@ namespace ShareSpace{
   namespace NetSpace{
 
     RedisBlock::RedisBlock(SessionId s) :BlockBase(s), m_parse(new RedisParseSpace::RedisParse()) {
- 
+
     }
     RedisBlock::RedisBlock(SessionId s, const std::vector<std::string>& args)
       : BlockBase(s)
@@ -28,7 +28,7 @@ namespace ShareSpace{
     RedisBlock::~RedisBlock(){
       m_parse.reset();
     }
-    bool RedisBlock::done() const  { 
+    bool RedisBlock::done() const  {
       return m_parse ? m_parse->isDone() : readComplete();
     }
     bool RedisBlock::recv(BufferPointer& buf){

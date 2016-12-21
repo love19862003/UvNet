@@ -1,12 +1,12 @@
 /********************************************************************
-	Filename: 	NetThread.cpp
-	Description:
-	Version:  1.0
-	Created:  31:3:2016   10:48
-	
-	Compiler: gcc vc
-	Author:   wufan, love19862003@163.com
-	Organization: lezhuogame
+  Filename:   NetThread.cpp
+  Description:
+  Version:  1.0
+  Created:  31:3:2016   10:48
+
+  Compiler: gcc vc
+  Author:   wufan, love19862003@163.com
+  Organization: lezhuogame
 *********************************************************************/
 #include "net/NetThread.h"
 #include "net/NetSession.h"
@@ -29,7 +29,7 @@ namespace ShareSpace {
       m_sendList.clear();
     }
 
-   
+
     void  NetThread::stop() {
       int r = uv_async_send(&m_asyncs[NetThread::async_stop_thread]);
       uvError("uv_async_send:", r);
@@ -46,6 +46,7 @@ namespace ShareSpace {
     }
     bool NetThread::check() {
       std::lock_guard<std::mutex>lock(m_mutexs[mutex_send]);
+      LOGDEBUG("[net] check state stop with thread:", (uint64)(this)," size:",m_sendList.size());
       return !m_sendList.empty();
     }
     void NetThread::asyncAddObject(){
@@ -56,7 +57,7 @@ namespace ShareSpace {
     }
     void NetThread::asyncStopThread(){
 
-      LOGDEBUG(" begin exit thread:", (uint64)this);
+      LOGDEBUG("[net] begin exit thread:", (uint64)this);
 
       for(auto& obj : m_objects){ obj->stop(); }
       realSend();
@@ -67,10 +68,10 @@ namespace ShareSpace {
         }
       }
       auto cb =  [](uv_handle_t* /*handle*/){/*LOGDEBUG("close ");*/};
-      for(auto& v : m_asyncs) { 
+      for(auto& v : m_asyncs) {
         uv_close((uv_handle_t*)&v, cb  );
       }
-      
+
       uv_timer_stop(&m_time);
       uv_close((uv_handle_t*)&m_time ,cb);
 
@@ -78,23 +79,33 @@ namespace ShareSpace {
       while(r == 0) {
         r = uv_loop_alive(m_loop);
         uv_stop(m_loop);
-        LOGDEBUG("set work  thread stop");
+        LOGDEBUG("[net] set work  thread stop");
         break;
       }
 
-      LOGDEBUG(" end exit thread:", (uint64)this);
+      LOGDEBUG("[net] end exit thread:", (uint64)this);
     }
     void NetThread::asyncKickSession(){
+      std::lock_guard<std::mutex>lock(m_mutexs[mutex_session]);
       for (auto& s : m_onlieList){
-        if (s->flag(NetSession::SESSION_KICK)){ 
-          s->close(); 
+        if (s->flag(NetSession::SESSION_KICK)){
           s->clearFlag(NetSession::SESSION_KICK);
+          s->close();
         }
       }
     }
 
 
     void NetThread::threadRun(){
+#ifndef WIN32
+      sigset_t signal_mask;
+      sigemptyset(&signal_mask);
+      sigaddset(&signal_mask, SIGPIPE);
+      int rc = pthread_sigmask(SIG_BLOCK, &signal_mask, NULL);
+      if(rc != 0){
+        printf("block sigpipe error\n");
+      }
+#endif 
       int r = uv_loop_init(m_loop);
       uvError("uv_loop_init:", r);
       auto funAddObject = [](uv_async_t* handle){
@@ -131,9 +142,9 @@ namespace ShareSpace {
       auto cb = [](uv_timer_t* time){
         NetThread* t = static_cast<NetThread*>(time->data);
         if(t){
-          t->m_lastTimeSend = t->m_timerSend; 
+          t->m_lastTimeSend = t->m_timerSend;
           t->m_timerSend = 0;
-          t->m_lastTimeRecv = t->m_timerRecv; 
+          t->m_lastTimeRecv = t->m_timerRecv;
           t->m_timerRecv = 0;
         }
       };
@@ -157,8 +168,11 @@ namespace ShareSpace {
     }
     void NetThread::realSend(){
       auto sessionFun = [&](SessionId id)->SessionPtr {
-        auto it = std::find_if(m_onlieList.begin(), m_onlieList.end(), [id](const SessionPtr& s) { return s->id() == id; });
-        if(it != m_onlieList.end()) { return  *it; }
+        std::lock_guard<std::mutex>lock(m_mutexs[mutex_session]);
+        auto it = std::find_if(m_onlieList.begin(),
+                               m_onlieList.end(),
+                               [id](const SessionPtr& s) { return s->id() == id; });
+        if(it != m_onlieList.end()) { return *it; }
         return nullptr;
       };
       std::set<SessionPtr> sset;
@@ -179,7 +193,7 @@ namespace ShareSpace {
           ++it;
           continue;
         }
-       
+
         if (!s->takeToWriteBuffer(msg)){
           ++it;
           continue;
@@ -204,19 +218,20 @@ namespace ShareSpace {
           std::lock_guard<std::mutex>lock(m_mutexs[mutex_recive]);
           msg.insert(msg.end(),m_recvList.begin(), m_recvList.end());
           m_recvList.clear();
-        }  
+        }
         {
           std::lock_guard<std::mutex>lock(m_mutexs[mutex_session]);
           for (auto it = m_onlieList.begin(); it != m_onlieList.end();){
             auto s = *it;
-            if(s->flag(NetSession::SESSION_CALL_CONN)){ 
+            if(s->flag(NetSession::SESSION_CALL_CONN)){
               conn.push_back(s);
               s->clearFlag(NetSession::SESSION_CALL_CONN);
             }
-            if(s->flag(NetSession::SESSION_CAll_CLOS)){ 
+            if(s->flag(NetSession::SESSION_CAll_CLOS)){
               dis.push_back(s);
               s->clearFlag(NetSession::SESSION_CAll_CLOS);
               it = m_onlieList.erase(it);
+              LOGDEBUG("[net] session:", s->id(), " close");
               continue;
             }
             ++it;
@@ -237,16 +252,12 @@ namespace ShareSpace {
       int r = uv_async_send(&m_asyncs[NetThread::async_send_message]);
       uvError("uv_async_send:", r);
     }
-   
+
     bool NetThread::notifyKick(){
       int r = uv_async_send(&m_asyncs[async_kick_session]);
       uvError("uv_async_send:", r);
       return true;
     }
-    enum {
-      S_VALUE = 3000,
-      C_VALUE = 2500,
-    };
     //增加一个网络对象
     bool NetThread::addObject(ObjectPtr obj){
       if (_RUN_ == m_state){
@@ -257,11 +268,8 @@ namespace ShareSpace {
       } else{
         m_objects.push_back(obj);
       }
+      if (obj){m_value += obj->value();}
 
-      if (obj){
-        m_value += obj->type() == _SERVER_FLAG_  ? S_VALUE : C_VALUE;   
-      }
-      
       return true;
     }
 
@@ -277,7 +285,7 @@ namespace ShareSpace {
                                              "\n\n"));
     }
     //////////////////////////////////////////////////////////////////////////
-    
+
 
 
   }
