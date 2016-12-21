@@ -1,5 +1,5 @@
 FILE(GLOB HEADER_NET  ./NetCore.h ./NetMessage.h ./redisparser.h)
-FILE(GLOB SOURCE_NET  *.h *.cpp)
+FILE(GLOB SOURCE_NET  *.h *.cpp *.c *.cc *.hpp)
 IF(UNIX)
   FILE(GLOB SOURCE_UV  ./libuv/src/*.h ./libuv/src/*.cpp ./libuv/src/*.c ./libuv/src/*.cc)
   FILE(GLOB SOURCE_UV_PLATFROM  ./libuv/src/unix/*.h ./libuv/src/unix/*.cpp ./libuv/src/unix/*.c ./libuv/src/unix/*.cc)
