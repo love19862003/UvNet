@@ -8,6 +8,7 @@
 #include "net/Version.h"
 #include "utility/StringUtility.h"
 #include "net/NetManager.h"
+#include "net/NetHttp.h"
 #include "demo/demo.h"
 
 using namespace ShareSpace;
@@ -20,6 +21,7 @@ void signalHandler(int /*sig*/){
 int main(int argc, char* argv[]){
    LOGINIT("");
    LOGDEBUG(uvNetVersion());
+   NetSpace::HttpBlock::initHttpParserSetting();
    
 
    std::string threadStr;

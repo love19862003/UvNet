@@ -131,13 +131,13 @@ namespace Demo{
     c.m_port = 6379;
     c.m_serviceType = _CLIENT_FLAG_;
     c.m_compress = false;
-    result = addRedisDemo(net, c);
-    MYASSERT(result);
+   // result = addRedisDemo(net, c);
+   // MYASSERT(result);
 
     addHttpServer(net);
-    httpRequestGet(net, "hello get");
-    httpRequestGet(net, "hello get1");
-    httpRequestGet(net, "hello ge2");
+    httpRequestGet(net, "hello&&get");
+    httpRequestGet(net, "hello&&get1");
+    httpRequestGet(net, "hello&&get2");
     httpRequestPost(net, "hello post");
     httpRequestPost(net, "hello post1");
     httpRequestPost(net, "hello post2");
