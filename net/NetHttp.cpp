@@ -217,7 +217,7 @@ namespace ShareSpace{
 
     static http_parser_settings req_parser_settings;
 
-    bool url_decode(const std::string& in, std::string& out){
+    bool urlDecode(const std::string& in, std::string& out){
       out.clear();
       out.reserve(in.size());
       for(std::size_t i = 0; i < in.size(); ++i){
@@ -243,6 +243,23 @@ namespace ShareSpace{
       return true;
     }
 
+    std::string urlEncode(const std::string& str){
+      std::stringstream ss;
+      size_t length = str.length();
+      for(size_t i = 0; i < length; i++){
+        if(isalnum((unsigned char)str[i]) || (str[i] == '-') ||  (str[i] == '_') ||(str[i] == '.') || (str[i] == '~')){
+          ss << str[i];
+        }else if(str[i] == ' '){
+          ss << '+';
+        }else{
+          ss << '%';
+          ss << std::hex << ((unsigned char)str[i] >> 4);
+          ss << std::hex << ((unsigned char)str[i] % 16);
+        }
+      }
+      return ss.str();
+    }
+
     void HttpBlock::initHttpParserSetting(){
       req_parser_settings.on_message_begin = [](http_parser* /*parser*/){ 
         //LOGDEBUG("***MESSAGE BEGIN***");
@@ -253,7 +270,7 @@ namespace ShareSpace{
         HttpBlock *client = (HttpBlock*)parser->data;
         if (client){ 
           std::string url;
-          url_decode(urlData, url);
+          urlDecode(urlData, url);
           if(url.empty() ||url[0] != '/' || url.find("..") != std::string::npos){
             client->setError(true);
             return 0;
@@ -347,8 +364,9 @@ namespace ShareSpace{
      
       switch(method){
       case AC_GET:{
+          m_url =  urlEncode(path + "?" +  cmd);
           std::stringstream request_stream;
-          request_stream << HttpMethod[method] << " /" << path << "?" <<  cmd << " HTTP/1.1" << CRLF;
+          request_stream << HttpMethod[method] << " /" << m_url << " HTTP/1.1" << CRLF;
           request_stream << "Host: " << host << CRLF;
           request_stream << "Accept: */*"<< CRLF;
           request_stream << "Connection: close" << CRLF << CRLF;
@@ -356,7 +374,8 @@ namespace ShareSpace{
         } break;
       case AC_POST:{
           std::stringstream request_stream;
-          request_stream << HttpMethod[method] <<  " /" << path << "?" << " HTTP/1.1" << CRLF;
+          m_url =  urlEncode(path + "?");
+          request_stream << HttpMethod[method] << " /" <<  m_url << " HTTP/1.1" << CRLF;
           request_stream << "Accept: */*"<< CRLF ;
           request_stream << "Accept-Charset:gb2312,utf-8;" << CRLF;
           request_stream << "Host: " << host << CRLF ;

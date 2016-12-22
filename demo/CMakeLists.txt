@@ -8,6 +8,11 @@ ADD_DEPENDENCIES(demo2 ${LINK_LIBS})
 TARGET_LINK_LIBRARIES(demo2 ${LINK_LIBS})
 
 
-ADD_EXECUTABLE(demo3 demo3.cpp demo.h main.cpp)
-ADD_DEPENDENCIES(demo3 ${LINK_LIBS})
-TARGET_LINK_LIBRARIES(demo3 ${LINK_LIBS})
+ADD_EXECUTABLE(demo-redis demo-redis.cpp demo.h main.cpp)
+ADD_DEPENDENCIES(demo-redis  ${LINK_LIBS})
+TARGET_LINK_LIBRARIES(demo-redis  ${LINK_LIBS})
+
+ADD_EXECUTABLE(demo-http demo-http.cpp demo.h main.cpp)
+ADD_DEPENDENCIES(demo-http  ${LINK_LIBS})
+TARGET_LINK_LIBRARIES(demo-http  ${LINK_LIBS})
+

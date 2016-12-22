@@ -2,7 +2,6 @@
 #include <signal.h>
 #include "log/MyLog.h"
 #include "net/Version.h"
-#include "net/NetHttp.h"
 #include "utility/StringUtility.h"
 #include "net/NetManager.h"
 #include "net/NetRedis.h"
@@ -99,25 +98,6 @@ namespace Demo{
     return net.add(std::move(property));
   }
 
-  bool addHttpServer(NetManager& net){
-    return net.httpServer(80, [](const std::string& path, const std::string& cmd)->std::string{
-      return "{\"" + path + "\":\"" + cmd + "\"}"; 
-    });
-  }
-
-  bool httpRequestGet(NetManager& net, const std::string& cmd){
-    uint32 id =  net.httpRequest("localhost", 80,  HttpBlock::AC_GET, "GetTest", cmd, [](uint32 id, const std::string& result){
-       LOGDEBUG("http request:", id, " value:", result);
-    });
-    return id > 0;
-  }
-
-  bool httpRequestPost(NetManager& net, const std::string& cmd){
-    uint32 id = net.httpRequest("localhost", 80, HttpBlock::AC_POST, "PostTest", cmd, [](uint32 id, const std::string& result){
-      LOGDEBUG("http request:", id, " value:", result);
-    });
-    return id > 0;
-  }
   void createDemo(NetManager& net){
 
     if(!gContext){
@@ -131,17 +111,7 @@ namespace Demo{
     c.m_port = 6379;
     c.m_serviceType = _CLIENT_FLAG_;
     c.m_compress = false;
-   // result = addRedisDemo(net, c);
-   // MYASSERT(result);
-
-    addHttpServer(net);
-    httpRequestGet(net, "hello&&get");
-    httpRequestGet(net, "hello&&get1");
-    httpRequestGet(net, "hello&&get2");
-    httpRequestPost(net, "hello post");
-    httpRequestPost(net, "hello post1");
-    httpRequestPost(net, "hello post2");
-    httpRequestPost(net, "hello post3");
-
+    result = addRedisDemo(net, c);
+    MYASSERT(result);
   }
 }
