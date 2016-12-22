@@ -58,6 +58,7 @@ namespace ShareSpace {
         m_workThreadCount = c > 0 ? c : 1;
         m_sessions.setOptional(INVALID_SESSION_ID);
         m_nets.setOptional("");
+        HttpBlock::initHttpParserSetting();
 
         LOGINFO("[net] server ip address info:", sizeof(sockaddr)," v6 " ,sizeof(sockaddr_in6)," v4 " ,sizeof(sockaddr_in));
        /* char buf[512];
