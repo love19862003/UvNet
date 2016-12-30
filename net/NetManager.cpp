@@ -115,7 +115,9 @@ namespace ShareSpace {
           if(s){
             auto obj = m_nets.getData(s->netName());
             MYASSERT(obj);
-            obj->call(m);
+            if (!m->error()){ obj->call(m);}
+            else{LOGWARNING("[net] object:", s->netName(), " handle error message");}
+            
           }
         }
 

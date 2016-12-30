@@ -204,7 +204,7 @@ namespace ShareSpace {
       // read recv body
       bool recvBody(BufferPointer& buf);
 
-      void uncompress();
+      bool uncompress();
       void compress();
     private:
       NetBlock(const NetBlock&) = delete;

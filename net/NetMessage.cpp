@@ -232,16 +232,17 @@ namespace ShareSpace {
       return recvBody(buf);
     }
 
-    void NetBlock::uncompress() {
+    bool NetBlock::uncompress() {
       if(done() && m_head._mask & (1 << NetBlock::head::_MASK_COMPRESS_)) {
         std::string str;
         if(!Utility::unCompressBuf(m_data->data(), m_data->maxLength(), str)) {
           MYASSERT(false, "uncompress failed...");
-          return;
+          return false;
         }
         m_data->reset();
         m_data->tailResize(str.c_str(), str.length());
       }
+      return true;
     }
     bool NetBlock::recvBody(BufferPointer& buf) {
       if(_STATE_BODY_ == m_state) {
@@ -257,7 +258,7 @@ namespace ShareSpace {
         buf->clearReadBuffer();
         if(m_data->isFull()) {
           m_state = _STATE_DONE_;
-          uncompress();
+          if(!uncompress()){ setError(false); return true;}
           m_data->lock();
           auto crc = Utility::crc32Buf(m_data->data(), m_data->length());
           setError(m_head._check != crc);
