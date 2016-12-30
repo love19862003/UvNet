@@ -145,12 +145,15 @@ namespace ShareSpace {
           return false;
         }
       }
-      int r = uv_shutdown(m_shutDown,
-                          stream,
-                          [](uv_shutdown_t* req, int){
-        auto s = static_cast<NetSession*>(req->data)->shared_from_this();
-        if(s){s->close();}});
-      uvError("uv_shutdown:", r);
+      if (nread < 0){
+        int r = uv_shutdown(m_shutDown,
+                            stream,
+                            [](uv_shutdown_t* req, int){
+          auto s = static_cast<NetSession*>(req->data)->shared_from_this();
+          if(s){if(!s->checkResetConnect()){ s->close(); }}});
+        LOGDEBUG("[net] afterRead session:", m_sessionId, " shutdown");
+        uvError("uv_shutdown:", r);
+      }
       return false;
     }
     void NetSession::read(){
@@ -181,7 +184,7 @@ namespace ShareSpace {
         read();
         if(m_bufferSend->length() > 0 ){write();}
       }else{
-        LOGDEBUG("[net] connect ", m_ObjName, " failed status:", uv_strerror(status));
+        //LOGDEBUG("[net] connect ", m_ObjName, " failed status:", uv_strerror(status));
         if(flag(SESSION_RECONN)) {
           startTimer();
           //connectServer();
@@ -199,6 +202,11 @@ namespace ShareSpace {
         return ;
       }
 
+      if (m_timer){
+        uv_timer_stop(m_timer);
+        uv_close((uv_handle_t*)m_timer, nullptr);
+      }
+
       uv_close((uv_handle_t*)m_tcp, [](uv_handle_t* handle){
         auto s = static_cast<NetSession*>(handle->data)->shared_from_this();
         if(s){ s->setFlag(SESSION_CAll_CLOS);}
@@ -206,7 +214,7 @@ namespace ShareSpace {
       clearFlag(SESSION_CONNECT);
     }
 
-    void NetSession::clientSession(uv_tcp_t * tcp,
+    void NetSession::clientSession(uv_loop_t * loop,
                                    const std::string& addr,
                                    int port,
                                    const RecvCall& recvNotify,
@@ -214,7 +222,10 @@ namespace ShareSpace {
                                    const KickCall& kickNotify,
                                    const SendCall& sendNotify){
       //m_addr = addr;
-      m_tcp = tcp;
+      m_sessionType = STYPE_TCP_CLIENT;
+      m_tcp = podMalloc<uv_tcp_t>();
+      int r = uv_tcp_init(loop, m_tcp);
+      uvError("uv_tcp_init:", r);
       m_tcp->data = this;
       m_ip = addr;
       m_port = port;
@@ -237,7 +248,7 @@ namespace ShareSpace {
           podFree(resolver);
         }
       };
-      int r = uv_getaddrinfo(tcp->loop, req, onResolved, m_ip.c_str(), std::to_string(m_port).c_str(),nullptr);
+      r = uv_getaddrinfo(loop, req, onResolved, m_ip.c_str(), std::to_string(m_port).c_str(),nullptr);
       if (r != 0){
         MYASSERT(false);
         podFree(req);
@@ -247,12 +258,15 @@ namespace ShareSpace {
     }
 
 
-    void NetSession::httpClientSession(uv_tcp_t * tcp,
+    void NetSession::httpClientSession(uv_loop_t * loop,
                                        const std::string& addr,
                                        int port,
                                        const RecvCall& recvNotify,
                                        MessagePtr ptr){
-      m_tcp = tcp;
+      m_sessionType = STYPE_HTTP_CLIENT;
+      m_tcp = podMalloc<uv_tcp_t>();
+      int r = uv_tcp_init(loop, m_tcp);
+      uvError("uv_tcp_init:", r);
       m_tcp->data = this;
       m_ip = addr;
       m_port = port;
@@ -276,7 +290,7 @@ namespace ShareSpace {
           podFree(resolver);
         }
       };
-      int r = uv_getaddrinfo(tcp->loop, req, onResolved, m_ip.c_str(), std::to_string(m_port).c_str(), nullptr);
+      r = uv_getaddrinfo(loop, req, onResolved, m_ip.c_str(), std::to_string(m_port).c_str(), nullptr);
       if(r != 0){
         MYASSERT(false);
         podFree(req);
@@ -294,16 +308,19 @@ namespace ShareSpace {
           if(s){ s->connectServer(); }
         };
         uv_timer_init(m_tcp->loop, m_timer);
-        uv_timer_start(m_timer, tcall, 1000, 10000);
+        uv_timer_start(m_timer, tcall, 500, 10000);
+      } else{
+        uv_timer_set_repeat(m_timer, 10000);
+        uv_timer_again(m_timer);
       }
     }
 
     void NetSession::stopTimer(){
       if(m_timer){
         uv_timer_stop(m_timer);
-        uv_close((uv_handle_t*)m_timer ,nullptr);
-        podFree(m_timer);
-        m_timer = nullptr;
+        //uv_close((uv_handle_t*)m_timer ,nullptr);
+        //podFree(m_timer);
+        //m_timer = nullptr;
       }
     }
     bool NetSession::connectServer() {
@@ -335,6 +352,7 @@ namespace ShareSpace {
                                    const WriteCall& writeNotify,
                                    const KickCall& kickNotify,
                                    const SendCall& sendNotify){
+      m_sessionType = STYPE_TCP_SERVER;
       m_tcp = tcp;
       m_tcp->data = this;
       m_ip = addr;
@@ -352,6 +370,7 @@ namespace ShareSpace {
                                        const std::string& addr,
                                        const RecvCall& recvNotify,
                                        const SendCall& sendNotify){
+      m_sessionType = STYPE_HTTP;
       m_tcp = tcp;
       m_tcp->data = this;
       m_ip = addr;
@@ -376,6 +395,7 @@ namespace ShareSpace {
       return true;
     }
     void NetSession::write(){
+      if (!flag(SESSION_CONNECT)){return;}
       if (flag(SESSION_SEND)){MYASSERT(false);return;}
       auto call = [](uv_write_t* req, int status){
         SessionPtr s = static_cast<NetSession*>(req->data)->shared_from_this();
@@ -397,9 +417,12 @@ namespace ShareSpace {
                             (uv_stream_t*)m_tcp,
                             [](uv_shutdown_t* req, int){
           auto s = static_cast<NetSession*>(req->data)->shared_from_this();
-          if(s){s->close();};
+          if(s){
+            if(!s->checkResetConnect()){ s->close(); }
+          };
         });
         uvError("uv_shutdown:", r);
+        LOGDEBUG("[net] afterWrite session:", m_sessionId, " shutdown:",status);
         return;
       }
       m_sendTotalLen += m_bufferSend->length();
@@ -418,6 +441,27 @@ namespace ShareSpace {
       }
      /* MYASSERT(false);*/
       return false;
+    }
+
+    bool NetSession::checkResetConnect(){
+     if (!flag(SESSION_RECONN)){return false;}
+     if (STYPE_HTTP == m_sessionType){return false;}
+     if (STYPE_TCP_SERVER == m_sessionType){return false;}
+     clearFlag(SESSION_CONNECT);
+     uv_loop_t* loop = m_tcp->loop;
+     if(m_tcp){
+       uv_close((uv_handle_t*)m_tcp, [](uv_handle_t* handle){
+         uv_tcp_t* tcp =  (uv_tcp_t*)(handle);
+         podFree(tcp);
+       });
+     }
+
+     m_tcp = podMalloc<uv_tcp_t>();
+     int r = uv_tcp_init(loop, m_tcp);
+     uvError("uv_tcp_init:", r);
+     m_tcp->data = this;
+     startTimer();
+     return true;
     }
 
     std::string NetSession::info() const{

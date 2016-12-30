@@ -144,13 +144,13 @@ namespace ShareSpace{
         auto t = thread();
         MYASSERT(t);
         MYASSERT(m_session);
-        uv_tcp_t*  tcp = podMalloc<uv_tcp_t>();
-        int r = uv_tcp_init(t->loop(), tcp);
-        uvError("uv_tcp_init:", r);
-        setNoPIPEOptional(tcp);
+//         uv_tcp_t*  tcp = podMalloc<uv_tcp_t>();
+//         int r = uv_tcp_init(t->loop(), tcp);
+//         uvError("uv_tcp_init:", r);
+//         setNoPIPEOptional(tcp);
         if(config().m_compress){m_session->setFlag(NetSession::SESSSION_COMPRESS);}
         if(config().m_autoReconnect){ m_session->setFlag(NetSession::SESSION_RECONN);}
-        m_session->clientSession(tcp,
+        m_session->clientSession(t->loop(),
                                  config().m_address,
                                  config().m_port,
                                  std::bind(&NetThread::recvMsgList, t.get(), std::placeholders::_1, std::placeholders::_2),
@@ -310,10 +310,10 @@ namespace ShareSpace{
         auto t = thread();
         MYASSERT(t);
         MYASSERT(m_session);
-        uv_tcp_t*  tcp = podMalloc<uv_tcp_t>();
-        int r = uv_tcp_init(t->loop(), tcp);
-        uvError("uv_tcp_init:", r);
-        m_session->httpClientSession(tcp,
+//         uv_tcp_t*  tcp = podMalloc<uv_tcp_t>();
+//         int r = uv_tcp_init(t->loop(), tcp);
+//         uvError("uv_tcp_init:", r);
+        m_session->httpClientSession(t->loop(),
                                      config().m_address,
                                      config().m_port,
                                      std::bind(&NetThread::recvMsgList, t.get(), std::placeholders::_1, std::placeholders::_2),

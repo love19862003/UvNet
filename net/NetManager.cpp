@@ -106,7 +106,6 @@ namespace ShareSpace {
           MYASSERT(obj);
           if(obj->allow(s)){
             bool r = m_sessions.addData(s->id(), s);
-            MYASSERT(r, "get same session id ", s->id());
             obj->connect(s->id());
           } else{ realKick(s);}
         }
@@ -123,7 +122,9 @@ namespace ShareSpace {
         for(auto& s : listDisconnect){
           auto obj = m_nets.getData(s->netName());
           MYASSERT(obj);
-          if(_CLIENT_FLAG_ == obj->type()){ m_nets.eraseData(s->netName()); }
+          if(_CLIENT_FLAG_ == obj->type()){ 
+            m_nets.eraseData(s->netName());
+          }
           obj->close(s->id());
           m_sessions.eraseData(s->id());
         }

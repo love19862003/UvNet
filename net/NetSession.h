@@ -24,6 +24,14 @@ namespace ShareSpace {
     private:
       NetSession(const NetSession&) = delete;
       NetSession& operator = (const NetSession&) = delete;
+
+      enum SType{
+        STYPE_NULL = 0,
+        STYPE_TCP_SERVER= 1,
+        STYPE_HTTP = 2,
+        STYPE_HTTP_CLIENT = 3,
+        STYPE_TCP_CLIENT = 4,
+      };
     public:
       friend class NetThread;
 
@@ -43,6 +51,7 @@ namespace ShareSpace {
         SESSION_KICK = 0x0040,            // be kicked
         SESSION_CLEAR = 0x0080,           // clear request
       };
+      
       explicit NetSession(SessionId id,
                           size_t len,
                           const Config& config,
@@ -62,7 +71,7 @@ namespace ShareSpace {
       //thread safe
       const std::string& netName() const { return m_ObjName; }
       // work thread
-      void clientSession(uv_tcp_t * tcp,
+      void clientSession(uv_loop_t * loop,
                          const std::string& addr,
                          int port,
                          const RecvCall& recvNotify,
@@ -84,7 +93,7 @@ namespace ShareSpace {
                              const RecvCall& recvNotify,
                              const SendCall& sendNotify);
       // work thread
-      void httpClientSession(uv_tcp_t * tcp,
+      void httpClientSession(uv_loop_t * loop,
                              const std::string& addr,
                              int port,
                              const RecvCall& recvNotify,
@@ -96,6 +105,8 @@ namespace ShareSpace {
       // thread safe
       SessionId id() const{ return m_sessionId; }
     private:
+      bool checkResetConnect();
+
       // work thread
       void close();
       // work thread
@@ -120,8 +131,10 @@ namespace ShareSpace {
       // work thread
       void read();
 
-      //
+      //start timer
       void startTimer();
+
+      //stop timer
       void stopTimer();
     private:
       uv_tcp_t*      m_tcp;       //tcp
@@ -149,6 +162,8 @@ namespace ShareSpace {
       WriteCall m_threadAfterWrite = nullptr;
       KickCall m_notifyKick = nullptr;
       SendCall m_nofitySend = nullptr;
+
+      SType m_sessionType = STYPE_NULL;
     };
 
   }
