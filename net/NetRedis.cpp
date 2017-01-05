@@ -43,12 +43,13 @@ namespace ShareSpace{
       RedisBlock* p = new RedisBlock(id, m_cmd);
       return p;
     }
-    void RedisBlock::readBuffer(NetBuffer& buffer){
+    bool RedisBlock::readBuffer(NetBuffer& buffer, bool /*force*/){
       size_t len = std::min(m_cmd.length() - m_read, buffer.maxLength() - buffer.length());
       if (len > 0){
         buffer.tailData(m_cmd.c_str() + m_read, len);
         m_read += len;
       }
+      return true;
     }
     size_t RedisBlock::length() {
        if (m_parse){

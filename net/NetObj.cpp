@@ -378,7 +378,11 @@ namespace ShareSpace{
     }
 
     SessionPtr ObjectBase::createSession(){
-      return m_fun(m_property.config(), m_property.makeBlockFun());
+      auto s = m_fun(m_property.config(), m_property.makeBlockFun());
+      LOGINFO("[net] create session:", s->id(),
+              " with net object:", m_property.config().m_name, 
+              " type:", ServiceName[m_property.config().m_serviceType]);
+      return s;
     }
 
     ObjectPtr ObjectBase::create(const NetProperty& property, FunCreateSession fun){

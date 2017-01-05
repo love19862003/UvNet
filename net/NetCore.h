@@ -40,6 +40,8 @@ namespace ShareSpace {
       _HTTP_SERVER_,
       _HTTP_CLIENT_,
     };
+
+    const static std::string ServiceName[_HTTP_CLIENT_ + 1] = { "tcp_server", "tcp_client", "http_server", "http_client"};
     
 
     typedef std::string NetName;

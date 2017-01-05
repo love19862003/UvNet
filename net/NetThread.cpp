@@ -46,7 +46,7 @@ namespace ShareSpace {
     }
     bool NetThread::check() {
       std::lock_guard<std::mutex>lock(m_mutexs[mutex_send]);
-      LOGDEBUG("[net] check state stop with thread:", (uint64)(this)," size:",m_sendList.size());
+      LOGINFO("[net] check state stop with thread:", (uint64)(this)," size:",m_sendList.size());
       return !m_sendList.empty();
     }
     void NetThread::asyncAddObject(){
@@ -57,7 +57,7 @@ namespace ShareSpace {
     }
     void NetThread::asyncStopThread(){
 
-      LOGDEBUG("[net] begin exit thread:", (uint64)this);
+      LOGINFO("[net] begin exit thread:", (uint64)this);
 
       for(auto& obj : m_objects){ obj->stop(); }
       realSend();
@@ -67,7 +67,7 @@ namespace ShareSpace {
           s->close();
         }
       }
-      auto cb =  [](uv_handle_t* /*handle*/){/*LOGDEBUG("close ");*/};
+      auto cb =  [](uv_handle_t* /*handle*/){/*LOGINFO("close ");*/};
       for(auto& v : m_asyncs) {
         uv_close((uv_handle_t*)&v, cb  );
       }
@@ -79,11 +79,11 @@ namespace ShareSpace {
       while(r == 0) {
         r = uv_loop_alive(m_loop);
         uv_stop(m_loop);
-        LOGDEBUG("[net] set work  thread stop");
+        LOGINFO("[net] set work  thread stop");
         break;
       }
 
-      LOGDEBUG("[net] end exit thread:", (uint64)this);
+      LOGINFO("[net] end exit thread:", (uint64)this);
     }
     void NetThread::asyncKickSession(){
       std::lock_guard<std::mutex>lock(m_mutexs[mutex_session]);
@@ -156,7 +156,7 @@ namespace ShareSpace {
       uvError("uv_run:", r);
       r = uv_loop_close(m_loop);
       uvError("uv_loop_close:", r);
-      LOGDEBUG("exit net work thread");
+      LOGINFO("exit net work thread");
     }
 
     void NetThread::recvMsgList(const std::list<MessagePtr>& list, size_t size) {
@@ -190,7 +190,7 @@ namespace ShareSpace {
           continue;
         }
         if(!s->flag(NetSession::SESSION_CONNECT)) {
-          ++it;
+          if (_STOP_ == m_state){ it = m_sendList.erase(it); }else{ ++it;}
           continue;
         }
 
@@ -204,9 +204,7 @@ namespace ShareSpace {
           m_totalRealSendCount++;
           m_totalRealSendSize += size;
           m_timerSend += size;
-        } else {
-          ++it;
-        }
+        } else { ++it;}
       }
       //read send
       for(auto& s : sset) { s->write(); }
@@ -231,7 +229,7 @@ namespace ShareSpace {
               dis.push_back(s);
               s->clearFlag(NetSession::SESSION_CAll_CLOS);
               it = m_onlieList.erase(it);
-              LOGDEBUG("[net] session:", s->id(), " close");
+              LOGINFO("[net] session:", s->id(), " close");
               continue;
             }
             ++it;

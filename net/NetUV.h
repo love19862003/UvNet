@@ -25,10 +25,10 @@
 
 #include "log/MyLog.h"
 #ifdef _DEBUG
-#define uvError(info, e) if(e != 0){ LOGDEBUG("[net] ", info, uv_strerror(e)); MYASSERT(false);}
-//#define uvError(info, e) if(e != 0){ LOGDEBUG("[net] ",info, uv_strerror(e), FILE_FUNTION_LINE);}
+#define uvError(info, e) if(e != 0){ LOGINFO("[net] ", info, uv_strerror(e)); MYASSERT(false);}
+//#define uvError(info, e) if(e != 0){ LOGINFO("[net] ",info, uv_strerror(e), FILE_FUNTION_LINE);}
 #else
-#define uvError(info, e) if(e != 0){ LOGDEBUG("[net] ",info, uv_strerror(e), FILE_FUNTION_LINE);}
+#define uvError(info, e) if(e != 0){ LOGINFO("[net] ",info, uv_strerror(e), FILE_FUNTION_LINE);}
 #endif // _DEBUG
 
 namespace ShareSpace {

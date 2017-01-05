@@ -78,6 +78,7 @@ namespace ShareSpace {
       memset(m_buffer, 0, m_writePos);
       m_writePos = 0;
       m_readPos = 0;
+      m_lock = false;
     }
     bool NetBuffer::tailNetBuffer(const NetBuffer& buffer) {
       if(this == &buffer) { return false; }
@@ -105,9 +106,28 @@ namespace ShareSpace {
       if(!hasWrite()) { return false; }
       size_t len = std::min<size_t>(m_writePos - m_readPos, buffer.maxLength() - buffer.m_writePos);
       char* p = readData(len);
-      if(!p) { return false; }
+      if(!p){ return false; }
       bool result = buffer.tail(p, len);
       return result;
+    }
+
+    bool NetBuffer::writeBuffer(NetBuffer& buffer, bool force, bool re){
+      if(this == &buffer){ return false; }
+      if(isFull()){ return false; }
+      if(!buffer.hasWrite()){ return false; }
+      if(force){
+        bool result = tailResize(buffer.m_buffer, buffer.m_writePos);
+        buffer.m_readPos = buffer.m_writePos;
+        return result;
+      } else{
+        size_t len = buffer.needReadLength();
+        if (!re && !canWrite(len)){ return false;}
+        resize(len + m_writePos);
+        char* p = buffer.readData(len);
+        if(!p){ return false; }
+        bool result = tail(p, len);
+        return result;
+      }
     }
 
     bool NetBuffer::resize(size_t len) {
@@ -160,10 +180,22 @@ namespace ShareSpace {
       m_head._mask = mask;
       m_head._check = Utility::crc32Buf(m_data->data() + sizeof(head), m_head._len - sizeof(head));
       m_data->setHeadPod(m_head);
+      MYASSERT(m_head._len <= 0xFFFFFF, "[net] make NetBlock length large:", m_head._len, " data:", m_data->length());
     }
 
-    void NetBlock::readBuffer(NetBuffer& buffer) {
-      m_data->readBuffer(buffer);
+    bool NetBlock::readBuffer(NetBuffer& buffer, bool force) {
+      if (force){
+        LOGINFO("[net] session:", session(), " force send:", m_head._len, " crc:", m_head._check, " compress:", (m_head._mask & (1 << NetBlock::head::_MASK_COMPRESS_)));
+        return buffer.writeBuffer(*m_data, force, true);
+      } else{
+        if (buffer.writeBuffer(*m_data, false, false)){
+         //LOGINFO("[net] session:", session(), " normal send:", m_head._len, " crc:", m_head._check, " compress:", (m_head._mask & (1 << NetBlock::head::_MASK_COMPRESS_)));
+         return true;
+        }else if(!buffer.hasWrite()){
+         //LOGINFO("[net] session:", session(), " normal send:", m_head._len, " crc:", m_head._check, " compress:", (m_head._mask & (1 << NetBlock::head::_MASK_COMPRESS_)));
+         return buffer.writeBuffer(*m_data, false, true);
+        }else{return false;}
+      }
     }
     BlockBase* NetBlock::clone(SessionId s) {
       NetBlock* p = new NetBlock(s);
@@ -209,7 +241,7 @@ namespace ShareSpace {
           return;
         }
         if(len < str.length()) { return; }
-        LOGDEBUG("[net] compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
+        LOGINFO("[net] compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
         m_data->reset();
         m_head._mask |= (1 << NetBlock::head::_MASK_COMPRESS_);
         m_head._len =sizeof(m_head) + str.length();
@@ -228,8 +260,11 @@ namespace ShareSpace {
         } else { 
           return false; 
         }
-      } 
-      return recvBody(buf);
+      }else if(_STATE_BODY_ == m_state){ 
+        return recvBody(buf);
+      }else{
+        return true;
+      }
     }
 
     bool NetBlock::uncompress() {
@@ -247,13 +282,20 @@ namespace ShareSpace {
     bool NetBlock::recvBody(BufferPointer& buf) {
       if(_STATE_BODY_ == m_state) {
         if (m_head._len > 0xFFFFFF ){
-          MYASSERT(false, "msg len is too large");
+          MYASSERT(false, "msg len is too large : ", m_head._len, " session:", session());
+          m_state = _STATE_DONE_;
+          setError(true);
+          return true;
+        }
+        
+        if (m_head._len < sizeof(head)){
+          MYASSERT(false, "[net] net message len limit session:", session());
           m_state = _STATE_DONE_;
           setError(true);
           return true;
         }
         size_t len = m_head._len - sizeof(head);
-        if(!m_data) { m_data = BufferPointer(new NetBuffer(len)); }
+        if(!m_data) { m_data = BufferPointer(new NetBuffer(len));}
         buf->readBuffer(*m_data);
         buf->clearReadBuffer();
         if(m_data->isFull()) {
@@ -262,7 +304,7 @@ namespace ShareSpace {
           m_data->lock();
           auto crc = Utility::crc32Buf(m_data->data(), m_data->length());
           setError(m_head._check != crc);
-          if (error()){LOGDEBUG("[net] m_head._check:", m_head._check, " data crc:", crc);}
+          if (error()){LOGINFO("[net] m_head._check:", m_head._check, " data crc:", crc);}
           return true;
         }
       }

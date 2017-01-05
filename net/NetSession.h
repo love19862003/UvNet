@@ -49,7 +49,7 @@ namespace ShareSpace {
         SESSION_RECONN = 0x0010,          // reconnect flag
         SESSSION_COMPRESS = 0x0020,       // need compress
         SESSION_KICK = 0x0040,            // be kicked
-        SESSION_CLEAR = 0x0080,           // clear request
+        SESSION_FORCE = 0x0080,           // need reset call full size
       };
       
       explicit NetSession(SessionId id,

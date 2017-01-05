@@ -249,9 +249,9 @@ namespace ShareSpace{
       for(size_t i = 0; i < length; i++){
         if(isalnum((unsigned char)str[i]) || (str[i] == '-') ||  (str[i] == '_') ||(str[i] == '.') || (str[i] == '~')){
           ss << str[i];
-        }else if(str[i] == ' '){
-          ss << '+';
-        }else{
+        //} else if(str[i] == ' '){
+        //  ss << '+';
+        } else{
           ss << '%';
           ss << std::hex << ((unsigned char)str[i] >> 4);
           ss << std::hex << ((unsigned char)str[i] % 16);
@@ -403,12 +403,12 @@ namespace ShareSpace{
       size_t nread = buf->needReadLength();
       int64 parsed = (int64)http_parser_execute(m_parser.get(), &req_parser_settings, buf->readData(),nread);
       if(m_parser->upgrade){
-        LOGDEBUG("We do not support upgrades yet");
+        LOGINFO("We do not support upgrades yet");
         setError(true);
       } else if(static_cast<size_t>(parsed) != nread){
-        LOGDEBUG("parsed incomplete data:", parsed, "/", nread, " bytes parsed");
+        LOGINFO("parsed incomplete data:", parsed, "/", nread, " bytes parsed");
         auto error = http_errno_description((http_errno)m_parser->http_errno);
-        LOGDEBUG("\n***", error, " ***\n");
+        LOGINFO("\n***", error, " ***\n");
         setError(true);
       }
 
@@ -424,10 +424,12 @@ namespace ShareSpace{
       return nullptr;
     }
 
-    void HttpBlock::readBuffer(NetBuffer& buffer){
+    bool HttpBlock::readBuffer(NetBuffer& buffer,bool /*force*/){
      if(buffer.tailData(m_request.data(), m_request.length())){
        m_done = true;
+       return true;
      }
+     return false;
     }
 
     size_t HttpBlock::length(){

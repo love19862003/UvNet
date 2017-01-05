@@ -116,6 +116,7 @@ namespace ShareSpace {
         m_waiteMessage->recv(m_bufferRecv);
         if(m_waiteMessage->done()) {
           auto p = m_waiteMessage;
+          if (p->error()){ MYASSERT(false, "[net] session:", m_sessionId, " obj:", m_ObjName);}
           //MYASSERT(!p->error(), "crc32 check is error");
           m_waiteMessage = nullptr;
           return p;
@@ -148,10 +149,8 @@ namespace ShareSpace {
       if (nread < 0){
         int r = uv_shutdown(m_shutDown,
                             stream,
-                            [](uv_shutdown_t* req, int){
-          auto s = static_cast<NetSession*>(req->data)->shared_from_this();
-          if(s){if(!s->checkResetConnect()){ s->close(); }}});
-        LOGDEBUG("[net] afterRead session:", m_sessionId, " shutdown");
+                            [](uv_shutdown_t* req, int){ auto s = static_cast<NetSession*>(req->data)->shared_from_this(); if(s){ if(!s->checkResetConnect()){ s->close(); } }});
+        LOGINFO("[net] afterRead session:", m_sessionId, " shutdown:", m_ObjName);
         uvError("uv_shutdown:", r);
       }
       return false;
@@ -181,16 +180,15 @@ namespace ShareSpace {
         stopTimer();
         setFlag(SESSION_CONNECT);
         setFlag(SESSION_CALL_CONN);
+        setFlag(SESSION_FORCE);
         read();
         if(m_bufferSend->length() > 0 ){write();}
       }else{
-        //LOGDEBUG("[net] connect ", m_ObjName, " failed status:", uv_strerror(status));
+        LOGINFO("[net] connect:", m_ObjName, " session:", m_sessionId, " failed status:", uv_strerror(status));
         if(flag(SESSION_RECONN)) {
           startTimer();
-          //connectServer();
-          LOGDEBUG("[net] reconnect server ", m_ip, " port:", m_port);
+          /*LOGINFO("[net] reconnect server ", m_ip, " port:", m_port);*/
         } else {
-          //MYASSERT(false);
           close();
         }
       }
@@ -198,7 +196,7 @@ namespace ShareSpace {
 
     void NetSession::close( /*bool call*/){
       if (uv_is_closing((uv_handle_t*)m_tcp)){
-        LOGDEBUG("[net] s:", m_sessionId, " ", m_ObjName, " is closeing");
+        LOGINFO("[net] s:", m_sessionId, " ", m_ObjName, " is closeing");
         return ;
       }
 
@@ -227,6 +225,8 @@ namespace ShareSpace {
       int r = uv_tcp_init(loop, m_tcp);
       uvError("uv_tcp_init:", r);
       m_tcp->data = this;
+      r = uv_tcp_nodelay(m_tcp, 1);
+      uvError("uv_tcp_nodelay:", r);
       m_ip = addr;
       m_port = port;
       m_threadAfterRead = recvNotify;
@@ -299,6 +299,17 @@ namespace ShareSpace {
 
 
     void NetSession::startTimer(){
+      MYASSERT(m_tcp);
+      clearFlag(SESSION_CONNECT);
+      uv_loop_t* loop = m_tcp->loop;
+      uv_close((uv_handle_t*)m_tcp, [](uv_handle_t* handle){podFree<uv_tcp_t>((uv_tcp_t*)(handle)); });
+      m_tcp = podMalloc<uv_tcp_t>();
+      int r = uv_tcp_init(loop, m_tcp);
+      uvError("uv_tcp_init:", r);
+      m_tcp->data = this;
+      r = uv_tcp_nodelay(m_tcp, 1);
+      uvError("uv_tcp_nodelay:", r);
+
       if(!m_timer){
         m_timer = podMalloc<uv_timer_t>();
         m_timer->data = this;
@@ -313,6 +324,10 @@ namespace ShareSpace {
         uv_timer_set_repeat(m_timer, 10000);
         uv_timer_again(m_timer);
       }
+
+      m_bufferSend->reset(true);
+      m_bufferRecv->reset(true);
+      m_waiteMessage.reset();
     }
 
     void NetSession::stopTimer(){
@@ -338,8 +353,7 @@ namespace ShareSpace {
       m_connect->data = this;
       int r = uv_tcp_connect(m_connect, m_tcp, m_res->ai_addr, call);
       if(r != 0) {
-        LOGERROR("[net] connect ", m_ObjName, " error:", uv_err_name(r));
-        //connetResult(r);
+        LOGINFO("[net] connect ", m_ObjName, " error:", uv_err_name(r));
         startTimer();
       } else{
         stopTimer();
@@ -356,6 +370,8 @@ namespace ShareSpace {
       m_tcp = tcp;
       m_tcp->data = this;
       m_ip = addr;
+      uv_tcp_keepalive(m_tcp, 1,1000);
+      uv_tcp_nodelay(m_tcp, 1);
       m_threadAfterRead = recvNotify;
       m_threadAfterWrite = writeNotify;
       m_nofitySend = sendNotify;
@@ -391,23 +407,35 @@ namespace ShareSpace {
     }
     bool NetSession::takeToWriteBuffer(MessagePtr m){
       if (flag(SESSION_SEND) || m_bufferSend->isFull() || !m){return false;}
-      m->readBuffer(*m_bufferSend);
-      return true;
+      if (!flag(SESSION_CONNECT)){return false;}
+      if (m_bufferSend->isLock()){MYASSERT(false); return false;}
+      if (flag(SESSION_FORCE)){
+        clearFlag(SESSION_FORCE);
+        MYASSERT(m_bufferSend->length() == 0);
+        LOGINFO("[net] session[", m_sessionId, "] take to write with force, len");
+        return m->readBuffer(*m_bufferSend, true);
+       
+      }else{ 
+        return m->readBuffer(*m_bufferSend, false);
+      }
     }
     void NetSession::write(){
       if (!flag(SESSION_CONNECT)){return;}
       if (flag(SESSION_SEND)){MYASSERT(false);return;}
       auto call = [](uv_write_t* req, int status){
         SessionPtr s = static_cast<NetSession*>(req->data)->shared_from_this();
-        if(s){
-          s->afterWrite(status);
-        }
+        if(s){ s->afterWrite(status);}
       };
+      if (m_bufferSend->isLock() || m_bufferSend->length() <= 0){
+        MYASSERT(false);
+        return ;
+      }
       uv_buf_t buf;
       buf.base = m_bufferSend->data();
       buf.len = m_bufferSend->length();
       int r = uv_write(m_write, (uv_stream_t*)m_tcp, &buf, 1, call);
       uvError("uv_write:", r);
+      m_bufferSend->lock();
       setFlag(SESSION_SEND);
     }
 
@@ -415,18 +443,13 @@ namespace ShareSpace {
       if(status > 0) {
         int r = uv_shutdown(m_shutDown,
                             (uv_stream_t*)m_tcp,
-                            [](uv_shutdown_t* req, int){
-          auto s = static_cast<NetSession*>(req->data)->shared_from_this();
-          if(s){
-            if(!s->checkResetConnect()){ s->close(); }
-          };
-        });
+                            [](uv_shutdown_t* req, int){ auto s = static_cast<NetSession*>(req->data)->shared_from_this();if(s){if(!s->checkResetConnect()){ s->close(); }};});
         uvError("uv_shutdown:", r);
-        LOGDEBUG("[net] afterWrite session:", m_sessionId, " shutdown:",status);
+        LOGINFO("[net] afterWrite session:", m_sessionId, " shutdown:", m_ObjName);
         return;
       }
       m_sendTotalLen += m_bufferSend->length();
-      m_bufferSend->reset();
+      m_bufferSend->reset(true);
       clearFlag(SESSION_SEND);
       if (m_threadAfterWrite){
         m_threadAfterWrite();
@@ -447,19 +470,6 @@ namespace ShareSpace {
      if (!flag(SESSION_RECONN)){return false;}
      if (STYPE_HTTP == m_sessionType){return false;}
      if (STYPE_TCP_SERVER == m_sessionType){return false;}
-     clearFlag(SESSION_CONNECT);
-     uv_loop_t* loop = m_tcp->loop;
-     if(m_tcp){
-       uv_close((uv_handle_t*)m_tcp, [](uv_handle_t* handle){
-         uv_tcp_t* tcp =  (uv_tcp_t*)(handle);
-         podFree(tcp);
-       });
-     }
-
-     m_tcp = podMalloc<uv_tcp_t>();
-     int r = uv_tcp_init(loop, m_tcp);
-     uvError("uv_tcp_init:", r);
-     m_tcp->data = this;
      startTimer();
      return true;
     }

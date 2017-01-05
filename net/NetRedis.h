@@ -27,7 +27,7 @@ namespace ShareSpace{
      virtual bool recv(BufferPointer& buf) override;
      virtual BlockBase* clone(SessionId s) override;
      virtual void lock(bool /*compress*/) override { ; }
-     virtual void readBuffer(NetBuffer& buffer) override;
+     virtual bool readBuffer(NetBuffer& buffer, bool force) override;
      virtual size_t length() override;
      virtual bool readComplete() const override ;
      const std::vector<RedisParseSpace::RedisData>& result() const;

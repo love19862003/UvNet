@@ -33,13 +33,16 @@ namespace ShareSpace {
 
       inline bool isLock() const { return m_lock; }
       inline bool lock() { m_lock = true; return m_lock; }
+      inline void unLock(){m_lock = false;}
       inline bool hasWrite() const { return length() > 0; }
       inline bool hasRead() const { return needReadLength() > 0; }
       inline bool isFull() const { return m_writePos >= m_maxLen; }
       inline bool canRead(size_t len) const { return len <= needReadLength(); }
+      inline bool canWrite(size_t len) const {return len <= freeLength();}
 
       inline size_t length() const { return m_writePos; }
       inline size_t maxLength() const { return m_maxLen; }
+      inline size_t freeLength() const {return m_maxLen - m_writePos;}
       inline size_t needReadLength() const { return m_writePos - m_readPos; }
 
       inline const char* data() const { return m_buffer; }
@@ -88,6 +91,9 @@ namespace ShareSpace {
 
       // read data to buffer . the read len is std::min<m_writePos - m_readPos, buffer.m_maxLen - buffer.m_writePos >
       bool readBuffer(NetBuffer& buffer);
+
+      // write
+      bool writeBuffer(NetBuffer& buffer, bool force, bool resize);
 
       // read a pod data 
       template <typename PODTYPE>
@@ -143,7 +149,7 @@ namespace ShareSpace {
       virtual bool done() const = 0;
       virtual bool recv(BufferPointer& buf) = 0;
       virtual void lock(bool compress) = 0;
-      virtual void readBuffer(NetBuffer& buffer) = 0;
+      virtual bool readBuffer(NetBuffer& buffer, bool force) = 0;
       virtual size_t length() = 0;
       virtual bool readComplete() const = 0;
 
@@ -194,7 +200,7 @@ namespace ShareSpace {
       virtual bool recv(BufferPointer& buf) override;
       virtual BlockBase* clone(SessionId s) override;
       virtual void lock(bool compress) override;
-      virtual void readBuffer(NetBuffer& buffer) override;
+      virtual bool readBuffer(NetBuffer& buffer, bool force) override;
       virtual size_t length() override { return m_data ? m_data->maxLength() : 0; }
       virtual bool readComplete() const override { return !m_data->hasRead(); }
       

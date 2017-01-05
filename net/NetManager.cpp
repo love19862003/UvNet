@@ -89,7 +89,7 @@ namespace ShareSpace {
       SessionPtr addNewSession(const Config& config, const FunMakeBlock& fun){
         static std::atomic<SessionId> m_currentId(INVALID_SESSION_ID + 1);
         SessionId id = m_currentId.fetch_add(1);
-        LOGDEBUG("[net] new session id:", id);
+       /* LOGINFO("[net] new session id:", id);*/
         return  SessionPtr(new NetSession(id, _DEFAULT_BUFFER_SIZE, config, fun));
       }
       //poll消息到主线程
@@ -115,9 +115,7 @@ namespace ShareSpace {
           if(s){
             auto obj = m_nets.getData(s->netName());
             MYASSERT(obj);
-            if (!m->error()){ obj->call(m);}
-            else{LOGWARNING("[net] object:", s->netName(), " handle error message");}
-            
+            obj->call(m);
           }
         }
 
@@ -152,7 +150,7 @@ namespace ShareSpace {
           delay = std::chrono::duration_cast<std::chrono::milliseconds>(clockEnd - clockBegin);
           state = check();
 #ifdef _DEBUG
-          LOGDEBUG("[net] check stop state:", state ? " run " : "stop" );
+          LOGINFO("[net] check stop state:", state ? " run " : "stop" );
 #endif
         } while(delay.count() <= ms || state);
       }
@@ -162,10 +160,10 @@ namespace ShareSpace {
       bool debug() const{ 
         auto fun = [](const SessionMap::pair_type& pair){
           auto s = pair.second;
-          if (s){ LOGDEBUG("[net] ", s->info());}
+          if (s){ LOGINFO("[net] ", s->info());}
         };
         for(auto& t : m_threads){
-          LOGDEBUG("[net] ",t->info());
+          LOGINFO("[net] ",t->info());
         }
         m_sessions.forEach(fun);
         return true;
@@ -196,7 +194,7 @@ namespace ShareSpace {
       }
       //启动网络服务模块
       bool start(){
-        LOGDEBUG("[net] uv:", uv_version_string());
+        LOGINFO("[net] uv:", uv_version_string());
         for(unsigned int i = 0; i < m_workThreadCount; ++i){
           m_threads.push_back(std::make_shared<NetThread>());
         }
@@ -239,14 +237,13 @@ namespace ShareSpace {
         config.m_clearOnClose = true;
         
         auto back = [Call, id, this](const NetName& name, const MessagePtr& ptr){
-         /* NetSpace::SessionId s = ptr->session();*/
           auto p = std::static_pointer_cast<NetSpace::HttpBlock>(ptr);
-          if(!ptr->error() && p){ Call(id, p->content());}
+          if(p){ Call(id, ptr->error() ?  "" : p->content());}
           removeClient(name);
         };
 
         NetSpace::NetProperty property(config,back, nullptr,nullptr, [](const NetSpace::SessionId& id){return std::make_shared<NetSpace::HttpBlock>(id, false); });
-        MessagePtr m(new HttpBlock(0, method, config.m_address, path, query));
+        MessagePtr m(new HttpBlock(INVALID_SESSION_ID, method, config.m_address, path, query));
         if(add(property, m)){ return id;}
         return 0;
       }
