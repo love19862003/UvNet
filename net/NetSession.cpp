@@ -407,7 +407,7 @@ namespace ShareSpace {
     }
     bool NetSession::takeToWriteBuffer(MessagePtr m){
       if (flag(SESSION_SEND) || m_bufferSend->isFull() || !m){return false;}
-      if (!flag(SESSION_CONNECT)){return false;}
+      if (!flag(SESSION_CONNECT) && m_sessionType != STYPE_HTTP_CLIENT){return false;}
       if (m_bufferSend->isLock()){MYASSERT(false); return false;}
       if (flag(SESSION_FORCE)){
         clearFlag(SESSION_FORCE);
