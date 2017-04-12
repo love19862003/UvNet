@@ -84,6 +84,7 @@ namespace ShareSpace {
         m_threads.clear();
         m_sessions.clear();
         m_nets.clear();
+        std::cout<<"[net] release NetService" << std::endl;
       }
       //创建一个新的会话,并且分配一个NetThread(读写)线程
       SessionPtr addNewSession(const Config& config, const FunMakeBlock& fun){
@@ -105,7 +106,7 @@ namespace ShareSpace {
           auto obj = m_nets.getData(s->netName());
           MYASSERT(obj);
           if(obj->allow(s)){
-            bool r = m_sessions.addData(s->id(), s);
+            m_sessions.addData(s->id(), s);
             obj->connect(s->id());
           } else{ realKick(s);}
         }
@@ -129,6 +130,9 @@ namespace ShareSpace {
           m_sessions.eraseData(s->id());
         }
 
+        msglist.clear();
+        listDisconnect.clear();
+        listConnect.clear();
         return true;
       }
 
@@ -153,6 +157,10 @@ namespace ShareSpace {
           LOGINFO("[net] check stop state:", state ? " run " : "stop" );
 #endif
         } while(delay.count() <= ms || state);
+
+        m_threads.clear();
+        m_sessions.clear();
+        m_nets.clear();
       }
 
       bool isRun() const{ return m_state == _SERVICE_RUN_; }
@@ -281,6 +289,15 @@ namespace ShareSpace {
         return add(property);
       }
 
+      bool httpStop(uint32 port){
+        const NetName netName = "_Http_Server**" + std::to_string(port);
+        auto net = m_nets.getData(netName);
+        if (nullptr == net){return false;}
+        net->stop();
+        m_nets.eraseData(netName);
+        return true;
+      }
+
       //增加一个网络对象
       bool add(const NetProperty& property, MessagePtr m = nullptr){
         if(property.config().m_name.empty()){ return false; }
@@ -312,7 +329,7 @@ namespace ShareSpace {
         if(nullptr == msg){return false;}
         auto p = m_nets.getData(name);
         if(!p){ return false; }
-        msg->lock(p->config().m_compress);
+        msg->lock(p->config().m_compress, p->config().m_compressLen);
         m_sessions.forEach([&](const SessionMap::pair_type& pair){
           auto s = pair.second;
           if (s && s->netName() == name){
@@ -401,6 +418,10 @@ namespace ShareSpace {
     //http server
     bool NetManager::httpServer(uint32 port, const ResponseCall& Call){
      return m_service->httpServer(port, Call);
+    }
+
+    bool NetManager::httpStop(uint32 port){
+     return m_service->httpStop(port);
     }
 
   }

@@ -40,6 +40,9 @@ namespace ShareSpace {
       //http server
       bool httpServer(uint32 port,  const ResponseCall& Call);
 
+      //http server stop
+      bool httpStop(uint32 port);
+
       //移除一个网络(只能是client类型)
       bool remove(const NetName& name);
 

@@ -56,7 +56,7 @@ namespace ShareSpace {
                           size_t len,
                           const Config& config,
                           const FunMakeBlock& fun);
-      ~NetSession();
+      virtual ~NetSession();
       // check flag
       bool flag(unsigned int f) const;
       // set flag
@@ -164,6 +164,7 @@ namespace ShareSpace {
       SendCall m_nofitySend = nullptr;
 
       SType m_sessionType = STYPE_NULL;
+      size_t m_compressLen = 0;
     };
 
   }

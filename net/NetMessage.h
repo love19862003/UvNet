@@ -148,7 +148,7 @@ namespace ShareSpace {
       virtual BlockBase* clone(SessionId s) = 0;
       virtual bool done() const = 0;
       virtual bool recv(BufferPointer& buf) = 0;
-      virtual void lock(bool compress) = 0;
+      virtual void lock(bool compress, uint32 len) = 0;
       virtual bool readBuffer(NetBuffer& buffer, bool force) = 0;
       virtual size_t length() = 0;
       virtual bool readComplete() const = 0;
@@ -199,7 +199,7 @@ namespace ShareSpace {
       virtual bool done() const override{ return m_state == _STATE_DONE_; }
       virtual bool recv(BufferPointer& buf) override;
       virtual BlockBase* clone(SessionId s) override;
-      virtual void lock(bool compress) override;
+      virtual void lock(bool compress, uint32 len) override;
       virtual bool readBuffer(NetBuffer& buffer, bool force) override;
       virtual size_t length() override { return m_data ? m_data->maxLength() : 0; }
       virtual bool readComplete() const override { return !m_data->hasRead(); }
@@ -211,7 +211,7 @@ namespace ShareSpace {
       bool recvBody(BufferPointer& buf);
 
       bool uncompress();
-      void compress();
+      void compress(uint32 compressLen);
     private:
       NetBlock(const NetBlock&) = delete;
       NetBlock& operator = (const NetBlock&) = delete;

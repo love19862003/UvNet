@@ -217,23 +217,23 @@ namespace ShareSpace {
       return recvHead(buf);
     }
 
-    void NetBlock::lock(bool com) {
+    void NetBlock::lock(bool com, uint32 len) {
       if(m_data->isLock()) {
-        MYASSERT(false);
+        //MYASSERT(false);
         return;
       }
       m_head._len = m_data->length();
       //m_head._mask = m_head._mask;
       m_head._check = Utility::crc32Buf(m_data->data() + sizeof(head), m_head._len - sizeof(head));
-      if(com) { compress(); }
+      if(com) { compress(len); }
       m_data->setHeadPod(m_head);
       m_data->lock();
     }
 
     //压缩消息接口
-   void  NetBlock::compress() {
+   void  NetBlock::compress(uint32 compressLen) {
       if(m_head._mask & (1 << NetBlock::head::_MASK_COMPRESS_)) { return; }
-      if(m_data && m_data->maxLength() - sizeof(NetBlock::head) > NetBlock::head::_COMPRESS_SIZE_) {
+      if(m_data && m_data->maxLength() - sizeof(NetBlock::head) > compressLen) {
         std::string str;
         auto len = m_data->maxLength() - sizeof(NetBlock::head);
         if(!Utility::compressBuf(m_data->data() + sizeof(NetBlock::head), len, str)) {
@@ -241,10 +241,10 @@ namespace ShareSpace {
           return;
         }
         if(len < str.length()) { return; }
-        LOGINFO("[net] compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
+        //LOGINFO("[net] compress len[", len, "] to [", str.length(), "] ", str.length() / float(len));
         m_data->reset();
         m_head._mask |= (1 << NetBlock::head::_MASK_COMPRESS_);
-        m_head._len =sizeof(m_head) + str.length();
+        m_head._len = sizeof(m_head) + str.length();
         m_data->tailPod<NetBlock::head>(m_head);
         m_data->tailData(str.c_str(), str.length());
       }

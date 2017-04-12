@@ -20,7 +20,7 @@ namespace ShareSpace{
       enum {buffer_len = 256,};
     public:
       explicit TcpServer(const NetProperty& property, FunCreateSession fun) : ObjectBase(property, fun){
-        m_tcp = podMalloc<uv_tcp_t>() ;
+        m_tcp = nullptr ;
         m_allow = property.config().m_allow;
         m_address = property.config().m_address;
         m_port = property.config().m_port;
@@ -32,6 +32,7 @@ namespace ShareSpace{
           podFree(m_tcp);
           m_tcp = nullptr;
         }
+        LOGINFO("[net] free tcp server");
       }
 
       void sessionConnect(){
@@ -72,6 +73,11 @@ namespace ShareSpace{
           return false;
         }
         m_flag &= (~_TAG_ADD);
+        if(m_tcp){
+          podFree(m_tcp);
+          m_tcp = nullptr;
+        }
+
         auto t = thread();
         uv_loop_t* loop = t->loop();
         m_tcp = podMalloc<uv_tcp_t>();
@@ -186,7 +192,7 @@ namespace ShareSpace{
       enum{ buffer_len = 256, };
     public:
       explicit HttpServer(const NetProperty& property, FunCreateSession fun): ObjectBase(property, fun){
-        m_tcp = podMalloc<uv_tcp_t>();
+        m_tcp = nullptr;
         m_allow = property.config().m_allow;
         m_address = property.config().m_address;
         m_port = property.config().m_port;
@@ -198,6 +204,7 @@ namespace ShareSpace{
           podFree(m_tcp);
           m_tcp = nullptr;
         }
+        LOGINFO("[net] free tcp server");
       }
 
       void sessionConnect(){
@@ -237,6 +244,10 @@ namespace ShareSpace{
         m_flag &= (~_TAG_ADD);
         auto t = thread();
         uv_loop_t* loop = t->loop();
+        if(m_tcp){
+          podFree(m_tcp);
+          m_tcp = nullptr;
+        }
         m_tcp = podMalloc<uv_tcp_t>();
         m_tcp->data = this;
         int r = 0;
@@ -379,9 +390,9 @@ namespace ShareSpace{
 
     SessionPtr ObjectBase::createSession(){
       auto s = m_fun(m_property.config(), m_property.makeBlockFun());
-      LOGINFO("[net] create session:", s->id(),
-              " with net object:", m_property.config().m_name, 
-              " type:", ServiceName[m_property.config().m_serviceType]);
+//       LOGINFO("[net] create session:", s->id(),
+//               " with net object:", m_property.config().m_name, 
+//               " type:", ServiceName[m_property.config().m_serviceType]);
       return s;
     }
 

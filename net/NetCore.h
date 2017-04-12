@@ -63,6 +63,7 @@ namespace ShareSpace {
       bool m_compress = false;
       std::string m_allow = "";
       bool m_clearOnClose = false;
+      int m_compressLen = 0;
     };
 
     class NetProperty{

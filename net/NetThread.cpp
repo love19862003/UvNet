@@ -27,6 +27,7 @@ namespace ShareSpace {
       m_onlieList.clear();
       m_recvList.clear();
       m_sendList.clear();
+      m_objects.clear();
     }
 
 
@@ -229,7 +230,7 @@ namespace ShareSpace {
               dis.push_back(s);
               s->clearFlag(NetSession::SESSION_CAll_CLOS);
               it = m_onlieList.erase(it);
-              LOGINFO("[net] session:", s->id(), " close");
+              //LOGINFO("[net] session:", s->id(), " close");
               continue;
             }
             ++it;
@@ -273,6 +274,7 @@ namespace ShareSpace {
 
     std::string NetThread::info() const{
      return std::move(MyLog::Log::makeString("\nNet thread:", (uint64)(&m_thread_work),
+                                             "\nm_sendList:", m_sendList.size(),
                                              "\nonlines:", m_onlines,
                                              "\ntotalRecv:", m_totalRealRecv,
                                              "\ntotalRecvCount:", m_totalRealRecvCount,

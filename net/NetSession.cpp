@@ -72,6 +72,7 @@ namespace ShareSpace {
       m_write->data = this;
       m_shutDown->data = this;
       m_flag = 0;
+      m_compressLen = config.m_compressLen;
     }
     NetSession::~NetSession() {
       if(m_tcp){ podFree(m_tcp); }
@@ -87,6 +88,13 @@ namespace ShareSpace {
         uv_freeaddrinfo(m_res);
         m_res = nullptr;
       }
+
+      m_tcp = nullptr;
+      m_connect = nullptr;
+      m_write = nullptr;
+      m_timer = nullptr;
+
+      LOGINFO("[net] free session:", m_sessionId);
     }
 
     bool NetSession::flag(unsigned int f) const{
@@ -150,7 +158,7 @@ namespace ShareSpace {
         int r = uv_shutdown(m_shutDown,
                             stream,
                             [](uv_shutdown_t* req, int){ auto s = static_cast<NetSession*>(req->data)->shared_from_this(); if(s){ if(!s->checkResetConnect()){ s->close(); } }});
-        LOGINFO("[net] afterRead session:", m_sessionId, " shutdown:", m_ObjName);
+        //LOGINFO("[net] afterRead session:", m_sessionId, " shutdown:", m_ObjName);
         uvError("uv_shutdown:", r);
       }
       return false;
@@ -353,7 +361,7 @@ namespace ShareSpace {
       m_connect->data = this;
       int r = uv_tcp_connect(m_connect, m_tcp, m_res->ai_addr, call);
       if(r != 0) {
-        LOGINFO("[net] connect ", m_ObjName, " error:", uv_err_name(r));
+        //LOGINFO("[net] connect ", m_ObjName, " error:", uv_err_name(r));
         startTimer();
       } else{
         stopTimer();
@@ -401,7 +409,7 @@ namespace ShareSpace {
     }
 
     void NetSession::pushWrite(MessagePtr msg){
-      msg->lock(flag(SESSSION_COMPRESS));
+      msg->lock(flag(SESSSION_COMPRESS), m_compressLen);
       ++m_sendTotalCount;
       if(m_nofitySend){ m_nofitySend(msg); }
     }
@@ -412,7 +420,7 @@ namespace ShareSpace {
       if (flag(SESSION_FORCE)){
         clearFlag(SESSION_FORCE);
         MYASSERT(m_bufferSend->length() == 0);
-        LOGINFO("[net] session[", m_sessionId, "] take to write with force, len");
+        //LOGINFO("[net] session[", m_sessionId, "] take to write with force, len");
         return m->readBuffer(*m_bufferSend, true);
        
       }else{ 
@@ -445,7 +453,7 @@ namespace ShareSpace {
                             (uv_stream_t*)m_tcp,
                             [](uv_shutdown_t* req, int){ auto s = static_cast<NetSession*>(req->data)->shared_from_this();if(s){if(!s->checkResetConnect()){ s->close(); }};});
         uvError("uv_shutdown:", r);
-        LOGINFO("[net] afterWrite session:", m_sessionId, " shutdown:", m_ObjName);
+        //LOGINFO("[net] afterWrite session:", m_sessionId, " shutdown:", m_ObjName);
         return;
       }
       m_sendTotalLen += m_bufferSend->length();

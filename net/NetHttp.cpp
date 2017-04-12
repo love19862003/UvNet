@@ -374,13 +374,13 @@ namespace ShareSpace{
         } break;
       case AC_POST:{
           std::stringstream request_stream;
-          m_url =  urlEncode(path + "?");
+          m_url = path + "?";// urlEncode(path + "?");
           request_stream << HttpMethod[method] << " /" <<  m_url << " HTTP/1.1" << CRLF;
           request_stream << "Accept: */*"<< CRLF ;
           request_stream << "Accept-Charset:gb2312,utf-8;" << CRLF;
           request_stream << "Host: " << host << CRLF ;
           request_stream << "Connection: close" << CRLF ;
-          request_stream << "Content-Type: application/json; charset=utf-8" << CRLF;
+          request_stream << "Content-Type: application/x-www-form-urlencoded" << CRLF;
           request_stream << "Content-Length: " << std::to_string(cmd.length())  << CRLF << CRLF;
           request_stream << cmd ;
           m_request = request_stream.str();
@@ -403,12 +403,12 @@ namespace ShareSpace{
       size_t nread = buf->needReadLength();
       int64 parsed = (int64)http_parser_execute(m_parser.get(), &req_parser_settings, buf->readData(),nread);
       if(m_parser->upgrade){
-        LOGINFO("We do not support upgrades yet");
+        //LOGINFO("We do not support upgrades yet");
         setError(true);
       } else if(static_cast<size_t>(parsed) != nread){
-        LOGINFO("parsed incomplete data:", parsed, "/", nread, " bytes parsed");
+        //LOGINFO("parsed incomplete data:", parsed, "/", nread, " bytes parsed");
         auto error = http_errno_description((http_errno)m_parser->http_errno);
-        LOGINFO("\n***", error, " ***\n");
+        //LOGINFO("\n***", error, " ***\n");
         setError(true);
       }
 
