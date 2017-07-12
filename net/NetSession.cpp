@@ -117,6 +117,7 @@ namespace ShareSpace {
       size_t l = std::min<size_t>(len, ll);
       uv_buf_t b = uv_buf_init(m_bufferRecv->writeData(), l);
       *buff = b;
+      MYASSERT(l > 0, "[net] allocReadBuffer len is 0 with session:", m_sessionId);
     }
     MessagePtr NetSession::readMessage(){
       if(!m_waiteMessage) { m_waiteMessage = m_makeBlockFun(m_sessionId); }
@@ -133,7 +134,7 @@ namespace ShareSpace {
       return nullptr;
     }
     bool NetSession::afterRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
-      if(nread >= 0 && buf && buf->base && buf->len > 0) {
+      if(nread > 0 && buf && buf->base && buf->len > 0) {
         std::list<MessagePtr> list;
         size_t size = 0;
         m_bufferRecv->writeData(nread);
@@ -189,8 +190,16 @@ namespace ShareSpace {
         setFlag(SESSION_CONNECT);
         setFlag(SESSION_CALL_CONN);
         setFlag(SESSION_FORCE);
+        // http 请求立马发送
+        if(m_sessionType == STYPE_HTTP_CLIENT){
+          write();
+        } else{
+          //tcp client 直接重置请求
+          m_bufferSend->reset(true);
+          m_bufferRecv->reset(true);
+          m_waiteMessage.reset();
+        }
         read();
-        if(m_bufferSend->length() > 0 ){write();}
       }else{
         LOGINFO("[net] connect:", m_ObjName, " session:", m_sessionId, " failed status:", uv_strerror(status));
         if(flag(SESSION_RECONN)) {

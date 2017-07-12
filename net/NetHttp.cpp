@@ -289,11 +289,11 @@ namespace ShareSpace{
         }
         return 0;
       };
-      req_parser_settings.on_header_field = [](http_parser* /*parser*/, const char* /*at*/, size_t /*length*/){
+      req_parser_settings.on_header_field = [](http_parser* parser, const char* at, size_t length){
         //LOGDEBUG("Header field: ", std::string(at, length));
         return 0;
       };
-      req_parser_settings.on_header_value = [](http_parser* /*parser*/, const char* /*at*/, size_t /*length*/){
+      req_parser_settings.on_header_value = [](http_parser* parser, const char* at, size_t length){
         //LOGDEBUG("Header value:", std::string(at, length));
         return 0;
       };
@@ -302,7 +302,7 @@ namespace ShareSpace{
         return 0;
       };
       req_parser_settings.on_body = [](http_parser* parser, const char* at, size_t length){
-        //LOGDEBUG("Body:", std::string(at, length));
+        LOGDEBUG("Body:", std::string(at, length));
         HttpBlock *client = (HttpBlock*)parser->data;
         if(at && client){
           client->m_request.append(at, length);
@@ -374,14 +374,14 @@ namespace ShareSpace{
         } break;
       case AC_POST:{
           std::stringstream request_stream;
-          m_url = path + "?";// urlEncode(path + "?");
+          m_url = path;// urlEncode(path + "?");
           request_stream << HttpMethod[method] << " /" <<  m_url << " HTTP/1.1" << CRLF;
           request_stream << "Accept: */*"<< CRLF ;
           request_stream << "Accept-Charset:gb2312,utf-8;" << CRLF;
           request_stream << "Host: " << host << CRLF ;
           request_stream << "Connection: close" << CRLF ;
           request_stream << "Content-Type: application/x-www-form-urlencoded" << CRLF;
-          request_stream << "Content-Length: " << std::to_string(cmd.length())  << CRLF << CRLF;
+          request_stream << "Content-Length: " << cmd.length()  << CRLF << CRLF;
           request_stream << cmd ;
           m_request = request_stream.str();
         }break;
